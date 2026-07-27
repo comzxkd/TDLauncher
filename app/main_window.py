@@ -22,7 +22,12 @@ from progress_parser import ProgressParser
 
 def _find_tdl() -> Optional[str]:
     """查找 tdl.exe 路径。从源码运行时需自行安装 tdl（https://github.com/iyear/tdl）。"""
+    # PyInstaller 打包后数据文件在 _internal/ 下
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(__file__)))
+
     candidates = [
+        os.path.join(base, "vendor", "tdl.exe"),
+        os.path.join(base, "_internal", "vendor", "tdl.exe"),
         os.path.expanduser("~/.tdl/bin/tdl.exe"),
         r"C:\tdl\tdl.exe",
     ]
