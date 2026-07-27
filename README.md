@@ -84,16 +84,22 @@ https://t.me/simisebaisi/50063?comment=211049  # Comment link
 https://t.me/myhostloc/1485524?thread=1485523  # Thread link
 ```
 
-### Build Standalone EXE
+### Download (Recommended)
+
+Download the latest pre-built package from [Releases](https://github.com/comzxkd/TDLauncher/releases).
+It includes `TDLauncher.exe` + `tdl.exe` — just unzip and run.
+
+### Build from Source
 
 ```powershell
 pip install pyinstaller
+# Download tdl.exe first (see note below)
 pyinstaller --noconsole --name TDLauncher --icon resources/icon.ico ^
   --add-data "vendor/tdl.exe;vendor" ^
   app/main.py
 ```
 
-> **Note**: `vendor/tdl.exe` is not included in this repository. For a portable build, download `tdl_Windows_64bit.zip` from [tdl releases](https://github.com/iyear/tdl/releases), extract `tdl.exe` into the `vendor/` directory, then run the build command above.
+> **Note**: The source repository does **not** include `vendor/tdl.exe`. To build your own portable EXE, download `tdl_Windows_64bit.zip` from [tdl releases](https://github.com/iyear/tdl/releases), extract `tdl.exe` into the `vendor/` directory, then run the command above.
 
 ### Tech Stack
 
@@ -186,16 +192,21 @@ python app\main.py
    - 去重、断点续传、Takeout 模式
 5. **点击「开始下载」** — 在日志面板中查看实时进度
 
-### 打包为独立 EXE
+### 直接下载（推荐）
+
+从 [Releases](https://github.com/comzxkd/TDLauncher/releases) 下载最新预打包版本，内含 `TDLauncher.exe` + `tdl.exe`，解压即用。
+
+### 从源码构建
 
 ```powershell
 pip install pyinstaller
+# 先下载 tdl.exe（见下方说明）
 pyinstaller --noconsole --name TDLauncher --icon resources/icon.ico ^
   --add-data "vendor/tdl.exe;vendor" ^
   app/main.py
 ```
 
-> **注意**：本仓库不包含 `vendor/tdl.exe`。如需制作便携包，请从 [tdl releases](https://github.com/iyear/tdl/releases) 下载后放入 `vendor/` 目录，再执行上方打包命令。
+> **注意**：源码仓库**不包含** `vendor/tdl.exe`。如需自行打包，请从 [tdl releases](https://github.com/iyear/tdl/releases) 下载 `tdl_Windows_64bit.zip`，解压放入 `vendor/` 目录后再执行上方命令。
 
 ### 致谢
 
