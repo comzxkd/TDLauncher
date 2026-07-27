@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Project (user-local, never commit)
+config.json
+logs/
+vendor/
+resources/*.ico
+resources/*.png
+*.log
+
+# Release packaging
+release/
