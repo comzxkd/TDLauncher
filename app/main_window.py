@@ -4,8 +4,8 @@ import re
 import sys
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer, QEvent
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, QTimer, QEvent, QRectF, QVariantAnimation, QEasingCurve
+from PySide6.QtGui import QFont, QColor, QPainter
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -48,88 +48,100 @@ def _find_tdl() -> Optional[str]:
 
 
 # ---- 终端配色 ----
-BG = "#0A0A0A"
-PANEL = "#101210"
-WELL = "#070907"
-INK = "#B7F0B0"
-DIM = "#57705A"
-ACC = "#4ADE80"
-ON = "#04170B"
-LINE = "#1E2A1E"
-WARN = "#E8A33D"
+BG = "#090C0A"
+PANEL = "#101612"
+WELL = "#080D0A"
+INK = "#D5E8D7"
+DIM = "#819487"
+ACC = "#71E59A"
+ON = "#07110B"
+LINE = "#26382D"
+WARN = "#E8B66B"
+FAIL = "#EE7777"
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 QSS = f"""
 #Root {{ background: {BG}; }}
-#Root * {{ color: {INK}; font-family: Consolas, "Cascadia Mono", "Microsoft YaHei UI", monospace; font-size: 15px; }}
+#Root * {{ color: {INK}; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 14px; }}
+QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Consolas, "Cascadia Mono", monospace; }}
 
-#Hdr, #Panel {{ background: {PANEL}; border: 1px solid {LINE}; }}
-#Brand {{ font-size: 16px; font-weight: bold; letter-spacing: 1px; }}
+#Hdr, #Panel {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 6px; }}
+#Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 1px; }}
 #Path {{ color: {DIM}; font-size: 12px; }}
-#SecTitle {{ color: {DIM}; font-size: 12px; letter-spacing: 1px; }}
-#SecCount {{ color: {ACC}; font-size: 12px; }}
+#SecTitle {{ color: {DIM}; font-size: 12px; font-weight: 600; letter-spacing: 1px; }}
+#SecCount {{ color: {ACC}; font-size: 12px; font-weight: 600; }}
 #FieldLabel {{ color: {DIM}; font-size: 12px; }}
 #Recog {{ color: {DIM}; font-size: 12px; }}
-#BigTitle {{ font-size: 17px; font-weight: bold; }}
+#BigTitle {{ font-size: 17px; font-weight: 700; }}
 #BigUrl {{ color: {DIM}; font-size: 12px; }}
-#BigPct {{ font-size: 42px; font-weight: bold; }}
+#BigPct {{ font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 42px; font-weight: 700; }}
 #BigPctUnit {{ color: {DIM}; font-size: 15px; }}
 #Meta {{ color: {DIM}; font-size: 12px; }}
-#MetaVal {{ color: {INK}; font-size: 12px; }}
-#Badge {{ color: {ACC}; border: 1px solid {ACC}; padding: 2px 9px; font-size: 12px; }}
+#MetaVal {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
+#Badge {{ color: {ACC}; border: 1px solid {LINE}; border-radius: 4px; padding: 3px 9px; font-size: 12px; font-weight: 600; }}
+#Badge[status="running"] {{ color: {ACC}; border-color: #45634D; background: #142019; }}
+#Badge[status="done"] {{ color: {DIM}; border-color: {LINE}; }}
+#Badge[status="failed"], #Badge[status="stopped"] {{ color: {FAIL}; border-color: #583636; background: #211516; }}
 #Stat {{ color: {DIM}; font-size: 12px; }}
-#StatVal {{ color: {ACC}; font-size: 12px; }}
+#StatVal {{ color: {ACC}; font-size: 12px; font-weight: 600; }}
 #LogTitle {{ color: {DIM}; font-size: 12px; letter-spacing: 1px; }}
 #LogToggle {{ background: transparent; border: none; color: {DIM}; font-size: 12px; letter-spacing: 1px; padding: 0; text-align: left; }}
 #LogToggle:hover {{ color: {ACC}; }}
 
 QTextEdit, QLineEdit, QComboBox, QSpinBox {{
-  background: {WELL}; border: 1px solid {LINE}; color: {INK};
+  background: {WELL}; border: 1px solid {LINE}; border-radius: 4px; color: {INK};
   selection-background-color: {ACC}; selection-color: {ON};
 }}
-QTextEdit {{ padding: 6px 9px; }}
-QLineEdit, QComboBox, QSpinBox {{ padding: 5px 9px; }}
+QTextEdit {{ padding: 7px 10px; }}
+QLineEdit, QComboBox, QSpinBox {{ padding: 6px 9px; }}
 QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {ACC}; }}
-QComboBox::drop-down {{ border: none; width: 18px; }}
+QComboBox::drop-down {{ border: none; width: 20px; }}
 QComboBox QAbstractItemView {{
   background: {PANEL}; border: 1px solid {LINE}; color: {INK};
-  selection-background-color: {ACC}; selection-color: {ON}; outline: none;
+  selection-background-color: #20392A; selection-color: {INK}; outline: none;
 }}
 QSpinBox::up-button, QSpinBox::down-button {{ width: 0; height: 0; border: none; }}
 
 QPushButton {{
-  background: {PANEL}; color: {INK}; border: 1px solid {LINE}; padding: 9px 16px;
+  background: #151D17; color: {INK}; border: 1px solid {LINE}; border-radius: 4px; padding: 8px 14px;
 }}
-QPushButton:hover {{ border-color: {ACC}; }}
-QPushButton:pressed {{ color: {ACC}; }}
-QPushButton:disabled {{ color: #33422f; border-color: #16201a; }}
-QPushButton#Primary {{ background: {ACC}; color: {ON}; border-color: {ACC}; font-weight: bold; }}
-QPushButton#Primary:hover {{ background: #5fe090; }}
-QPushButton#Primary:disabled {{ background: #1a2a1e; color: #33422f; border-color: #1a2a1e; }}
-QPushButton#Stop {{ color: {WARN}; border-color: {WARN}; font-weight: bold; background: #241a0d; }}
-QPushButton#Stop:hover {{ background: {WARN}; color: {ON}; }}
-QPushButton#Stop:disabled {{ color: #52432a; border-color: #33291a; background: #16110a; }}
-QPushButton#Toggle {{ padding: 4px 9px; color: {DIM}; border-color: {LINE}; font-size: 12px; }}
-QPushButton#Toggle:checked {{ color: {ACC}; border-color: {ACC}; }}
+QPushButton:hover {{ background: #1A261D; border-color: #45634D; }}
+QPushButton:pressed {{ background: #223629; color: {ACC}; }}
+QPushButton:disabled {{ background: #101510; color: #58645A; border-color: #202A22; }}
+QPushButton#Primary {{ background: {ACC}; color: {ON}; border-color: {ACC}; font-weight: 700; }}
+QPushButton#Primary:hover {{ background: #8AF0AA; border-color: #8AF0AA; }}
+QPushButton#Primary:disabled {{ background: #26392C; color: #69766C; border-color: #26392C; }}
+QPushButton#Stop {{ color: {WARN}; border-color: #55452E; font-weight: 600; background: #1D1912; }}
+QPushButton#Stop:hover {{ background: #332719; border-color: {WARN}; }}
+QPushButton#Stop:disabled {{ color: #6C6252; border-color: #302A20; background: #15130F; }}
+QPushButton#Toggle {{ padding: 5px 9px; color: {DIM}; border-color: {LINE}; font-size: 12px; }}
+QPushButton#Toggle:checked {{ color: {ACC}; background: #17251B; border-color: #45634D; }}
 
-QProgressBar {{ background: {WELL}; border: none; }}
-QProgressBar::chunk {{ background: {ACC}; }}
+QProgressBar {{ background: {WELL}; border: none; border-radius: 2px; }}
+QProgressBar::chunk {{ background: {ACC}; border-radius: 2px; }}
+QProgressBar[status="done"]::chunk {{ background: #5FAE79; }}
+QProgressBar[status="failed"]::chunk {{ background: {FAIL}; }}
+QProgressBar[status="stopped"]::chunk {{ background: #68736B; }}
 
-#QRow {{ background: transparent; border: none; border-left: 2px solid transparent; }}
-#QRow[active="true"] {{ background: #16301f; border-left: 2px solid {ACC}; }}
+#QRow {{ background: transparent; border: none; border-left: 2px solid transparent; border-radius: 4px; }}
+#QRow[active="true"] {{ background: #17251B; border-left: 2px solid {ACC}; }}
+#QRow[status="done"] #QMarker {{ color: #6FA982; }}
+#QRow[status="failed"] #QMarker {{ color: {FAIL}; }}
+#QRow[status="stopped"] #QMarker {{ color: {DIM}; }}
 #QMarker {{ color: {DIM}; }}
 #QRow[active="true"] #QMarker {{ color: {ACC}; }}
 #QName {{ color: {INK}; font-size: 13px; }}
-#QRow[active="true"] #QName {{ color: {ACC}; }}
+#QRow[active="true"] #QName {{ color: {ACC}; font-weight: 600; }}
 #QPct {{ color: {DIM}; font-size: 12px; }}
-#FName {{ color: {INK}; font-size: 13px; }}
-#FInfo {{ color: {DIM}; font-size: 12px; }}
+#FName {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
+#FInfo {{ color: {DIM}; font-size: 11px; }}
 
 #Scroll {{ background: transparent; border: none; }}
 #Scroll > QWidget > QWidget {{ background: transparent; }}
-QScrollBar:vertical {{ background: {WELL}; width: 9px; border: none; }}
-QScrollBar::handle:vertical {{ background: {LINE}; min-height: 24px; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; border: none; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: #314438; border-radius: 4px; min-height: 24px; }}
+QScrollBar::handle:vertical:hover {{ background: #496552; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QLabel {{ background: transparent; }}
@@ -155,43 +167,59 @@ class TipLabel(QLabel):
 
 
 class CellsBar(QWidget):
-    """把进度画成 24 格可见的量。"""
+    """把进度画成轻量的分段指示条。"""
 
     def __init__(self, count: int = 24, parent=None):
         super().__init__(parent)
         self._count = count
         self._value = 0
-        self._on = 0
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(3)
-        self._cells = []
-        off = f"background:{WELL}; border:1px solid {LINE};"
-        for _ in range(count):
-            c = QFrame()
-            c.setFixedHeight(14)
-            c.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            c.setStyleSheet(off)
-            lay.addWidget(c)
-            self._cells.append(c)
+        self._display_value = 0.0
+        self._animation = QVariantAnimation(self)
+        self._animation.setDuration(240)
+        self._animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._animation.valueChanged.connect(self._set_display_value)
+        self.setMinimumHeight(10)
 
     def setValue(self, v: int) -> None:
         v = max(0, min(100, int(v)))
         if v == self._value:
             return
         self._value = v
-        on = round(v / 100 * self._count)
-        if on == self._on:
+        if not self.isVisible():
+            self._display_value = float(v)
+            self.update()
             return
-        lo, hi = sorted((self._on, on))
-        self._on = on
-        on_css = f"background:{ACC}; border:1px solid {ACC};"
-        off_css = f"background:{WELL}; border:1px solid {LINE};"
-        for i in range(lo, hi):
-            self._cells[i].setStyleSheet(on_css if i < on else off_css)
+        self._animation.stop()
+        self._animation.setStartValue(self._display_value)
+        self._animation.setEndValue(float(v))
+        self._animation.start()
+
+    def _set_display_value(self, value) -> None:
+        self._display_value = float(value)
+        self.update()
 
     def value(self) -> int:
         return self._value
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        bounds = self.rect().adjusted(0, 1, 0, -1)
+        gap = 3
+        cell_width = max(1.0, (bounds.width() - gap * (self._count - 1)) / self._count)
+        on = self._display_value / 100.0 * self._count
+        active = QColor(ACC)
+        active.setAlpha(48)
+        painter.setPen(Qt.NoPen)
+        for i in range(self._count):
+            x = bounds.x() + i * (cell_width + gap)
+            rect = QRectF(x, bounds.y(), cell_width, bounds.height())
+            painter.setBrush(QColor(LINE))
+            painter.drawRoundedRect(rect, 2, 2)
+            fill = max(0.0, min(1.0, on - i))
+            if fill > 0:
+                painter.setBrush(active if fill < 1 else QColor(ACC))
+                painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2, 2)
 
 
 class QueueRow(QFrame):
@@ -204,6 +232,16 @@ class QueueRow(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         self._index = index
         self._on_click = on_click
+        self._row_animation = QVariantAnimation(self)
+        self._row_animation.setDuration(160)
+        self._row_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._row_animation.valueChanged.connect(self._set_row_opacity)
+        self._row_opacity = 0.0
+        self._bar_value = 0
+        self._bar_animation = QVariantAnimation(self)
+        self._bar_animation.setDuration(220)
+        self._bar_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._bar_animation.valueChanged.connect(self._set_bar_value)
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 6, 8, 7)
         v.setSpacing(5)
@@ -232,16 +270,61 @@ class QueueRow(QFrame):
             self._on_click(self._index)
         super().mousePressEvent(event)
 
+    def _set_row_opacity(self, value):
+        self._row_opacity = float(value)
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._row_opacity <= 0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setOpacity(self._row_opacity)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(ACC))
+        painter.drawRoundedRect(QRectF(0, 0, 3, self.height()), 1.5, 1.5)
+
     def set_active(self, on: bool) -> None:
+        self._row_animation.stop()
+        if not self.isVisible():
+            self._row_opacity = 1.0 if on else 0.0
+            self.update()
+        else:
+            self._row_animation.setStartValue(self._row_opacity)
+            self._row_animation.setEndValue(1.0 if on else 0.0)
+            self._row_animation.start()
         self.setProperty("active", "true" if on else "false")
         self.style().unpolish(self)
         self.style().polish(self)
 
     def set_status(self, status: str) -> None:
         self.marker.setText({"running": "▸", "done": "✓", "failed": "✗", "stopped": "■"}.get(status, "◦"))
+        self.setProperty("status", status)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def _set_bar_value(self, value):
+        self._bar_value = round(value)
+        self.bar.setValue(self._bar_value)
 
     def set_pct(self, v: int) -> None:
-        self.bar.setValue(v)
+        v = max(0, min(100, int(v)))
+        if v != self._bar_value:
+            if not self.isVisible():
+                self._bar_value = v
+                self.bar.setValue(v)
+            else:
+                self._bar_animation.stop()
+                self._bar_animation.setStartValue(self._bar_value)
+                self._bar_animation.setEndValue(v)
+                self._bar_animation.start()
+        if v >= 100 and self._bar_value >= 100:
+            self.bar.setProperty("status", "done")
+        elif v <= 0 and self._bar_value <= 0:
+            self.bar.setProperty("status", "")
+        self.bar.style().unpolish(self.bar)
+        self.bar.style().polish(self.bar)
         self.pct.setText(f"{v}%")
 
 
@@ -260,7 +343,6 @@ class Job:
         self.pct = 0
         self.command_pct = 0.0
         self.command_file_progress: dict = {}
-        self.command_output_mtime_ns: Optional[int] = None
         self.command_log_start = 0
         self.stage_progress = [0.0] * len(commands)
         download_count = sum(1 for command in commands if command and command[0] == "dl")
@@ -299,7 +381,13 @@ class FileRow(QFrame):
         self.bar.setFixedWidth(150)
         self.bar.setTextVisible(False)
         self.bar.setRange(0, 100)
+        self._animation = QVariantAnimation(self)
+        self._animation.setDuration(220)
+        self._animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._animation.valueChanged.connect(self._set_bar_value)
+        self._display_pct = 0
         self.info = QLabel("")
+        self._bar_value = 0
         self.info.setObjectName("FInfo")
         self.info.setFixedWidth(60)
         g.addWidget(self.name, 0, 0)
@@ -307,8 +395,29 @@ class FileRow(QFrame):
         g.addWidget(self.bar, 0, 1)
         g.addWidget(self.info, 0, 2)
 
+    def _set_bar_value(self, value):
+        self._bar_value = round(value)
+        self.bar.setValue(self._bar_value)
+
     def set_pct(self, v: int) -> None:
-        self.bar.setValue(v)
+        v = max(0, min(100, int(v)))
+        if v != self._display_pct:
+            if not self.isVisible():
+                self._bar_value = v
+                self.bar.setValue(v)
+                self._display_pct = v
+            else:
+                self._animation.stop()
+                self._animation.setStartValue(self._bar_value)
+                self._animation.setEndValue(v)
+                self._animation.start()
+                self._display_pct = v
+        if v >= 100:
+            self.bar.setProperty("status", "done")
+        elif v <= 0:
+            self.bar.setProperty("status", "")
+        self.bar.style().unpolish(self.bar)
+        self.bar.style().polish(self.bar)
         self.info.setText(f"{v}%" if v < 100 else "完成")
 
     def set_size(self, txt: str) -> None:
@@ -636,6 +745,11 @@ class MainWindow(QMainWindow):
         big.setSpacing(2)
         self._lbl_bigpct = QLabel("0")
         self._lbl_bigpct.setObjectName("BigPct")
+        self._bigpct_display = 0.0
+        self._bigpct_animation = QVariantAnimation(self)
+        self._bigpct_animation.setDuration(180)
+        self._bigpct_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._bigpct_animation.valueChanged.connect(self._set_bigpct_display)
         big.addWidget(self._lbl_bigpct, 0, Qt.AlignBottom)
         u = QLabel("%")
         u.setObjectName("BigPctUnit")
@@ -679,7 +793,15 @@ class MainWindow(QMainWindow):
         self._txt_output = QTextEdit()
         self._txt_output.setReadOnly(True)
         self._txt_output.setFont(QFont("Consolas", 9))
-        self._txt_output.setFixedHeight(82)
+        self._log_height = 82
+        self._txt_output.setFixedHeight(self._log_height)
+        self._txt_output.setVisible(True)
+        self._log_animation = QVariantAnimation(self)
+        self._log_animation.setDuration(180)
+        self._log_animation.setEasingCurve(QEasingCurve.InOutCubic)
+        self._log_animation.valueChanged.connect(self._animate_log_height)
+        self._log_animation.finished.connect(self._hide_log_output)
+        self._log_animation.finished.connect(self._fit)
         logcol.addWidget(self._txt_output)
         pfoot.addLayout(logcol, 1)
 
@@ -735,9 +857,27 @@ class MainWindow(QMainWindow):
         h.addWidget(val_widget)
         return w
 
+    def _animate_log_height(self, value):
+        self._log_height = max(0, round(value))
+        self._txt_output.setFixedHeight(self._log_height)
+        if self._log_height == 0:
+            self._txt_output.setVisible(False)
+        elif self._btn_log.isChecked():
+            self._txt_output.setVisible(True)
+
     def _toggle_log(self, on: bool):
-        self._txt_output.setVisible(on)
+        self._log_animation.stop()
         self._btn_log.setText("tdl 输出 ▾" if on else "tdl 输出 ▸")
+        self._log_animation.setStartValue(self._log_height)
+        self._log_animation.setEndValue(82 if on else 0)
+        if on:
+            self._txt_output.setVisible(True)
+        self._log_animation.start()
+
+    def _hide_log_output(self):
+        if not self._btn_log.isChecked():
+            self._txt_output.setFixedHeight(0)
+            self._txt_output.setVisible(False)
 
     # ---- 事件 ----
 
@@ -922,6 +1062,21 @@ class MainWindow(QMainWindow):
                 j.qrow.set_active(i == idx)
         self._show_detail(self._selected_job())
 
+    def _set_bigpct_display(self, value):
+        self._bigpct_display = float(value)
+        self._lbl_bigpct.setText(str(round(self._bigpct_display)))
+
+    def _animate_bigpct(self, value):
+        value = max(0, min(100, int(value)))
+        if not self._lbl_bigpct.isVisible():
+            self._bigpct_display = float(value)
+            self._lbl_bigpct.setText(str(value))
+            return
+        self._bigpct_animation.stop()
+        self._bigpct_animation.setStartValue(self._bigpct_display)
+        self._bigpct_animation.setEndValue(float(value))
+        self._bigpct_animation.start()
+
     def _show_detail(self, job):
         self._clear_layout(self._files_box, self._detail_file_rows)
         self._detail_files = {}
@@ -931,7 +1086,10 @@ class MainWindow(QMainWindow):
         self._lbl_url.setText(job.url)
         self._lbl_badge.setText({"running": "下载中", "done": "已完成", "failed": "失败",
                                  "queued": "排队", "stopped": "已停止"}.get(job.status, job.status))
-        self._lbl_bigpct.setText(str(job.pct))
+        self._lbl_badge.setProperty("status", job.status)
+        self._lbl_badge.style().unpolish(self._lbl_badge)
+        self._lbl_badge.style().polish(self._lbl_badge)
+        self._animate_bigpct(job.pct)
         self._cells.setValue(job.pct)
         self._lbl_speed.setText(job.speed or "—")
         self._lbl_eta.setText(job.eta or "—")
@@ -939,9 +1097,10 @@ class MainWindow(QMainWindow):
             self._ensure_detail_file(name, pct)
         self._sync_filecount(job)
         self._txt_output.setPlainText("\n".join(self._app_log + job.log))
+        self._btn_log.setText("tdl 输出 ▾" if self._btn_log.isChecked() else "tdl 输出 ▸")
 
     def _refresh_detail_progress(self, job):
-        self._lbl_bigpct.setText(str(job.pct))
+        self._animate_bigpct(job.pct)
         self._cells.setValue(job.pct)
         self._lbl_speed.setText(job.speed or "—")
         self._lbl_eta.setText(job.eta or "—")
@@ -1053,17 +1212,10 @@ class MainWindow(QMainWindow):
         job.parser.reset()
         job.command_pct = 0.0
         job.command_file_progress.clear()
-        job.command_output_mtime_ns = None
         job.command_log_start = len(job.log)
         job.speed = "—"
         job.eta = "—"
         args = job.commands[job.cur]
-        if args[:2] == ["chat", "export"] and "-o" in args:
-            try:
-                output_path = args[args.index("-o") + 1]
-                job.command_output_mtime_ns = os.stat(output_path).st_mtime_ns
-            except (OSError, IndexError):
-                pass
         job.runner = TdlRunner(self._tdl_path)
         job.runner.on_stdout = lambda t, j=job: self._on_job_output(j, t)
         job.runner.on_stderr = lambda t, j=job: self._on_job_output(j, t)
@@ -1163,11 +1315,9 @@ class MainWindow(QMainWindow):
         export_cmd = job.commands[job.cur]
         if export_cmd[:2] != ["chat", "export"] or "-o" not in export_cmd:
             return False
+        # 仅在导出命令成功退出后调用，此时 tdl 已写出该文件。
         try:
             output_path = export_cmd[export_cmd.index("-o") + 1]
-            stat = os.stat(output_path)
-            if job.command_output_mtime_ns is not None and stat.st_mtime_ns == job.command_output_mtime_ns:
-                return False
             with open(output_path, "r", encoding="utf-8") as f:
                 exported = json.load(f)
         except (OSError, ValueError, IndexError):
