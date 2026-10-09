@@ -247,11 +247,12 @@ class QueueRow(QFrame):
 class Job:
     """一个链接的下载任务（含其若干命令，顺序执行）。"""
 
-    def __init__(self, name: str, url: str, commands: list, labels: list):
+    def __init__(self, name: str, url: str, commands: list, labels: list, msgid: int = 0):
         self.name = name
         self.url = url
         self.commands = commands
         self.labels = labels
+        self.msgid = msgid
         self.status = "queued"      # queued | running | done | failed | stopped
         self.cur = 0
         self.done = 0
@@ -320,6 +321,7 @@ class MainWindow(QMainWindow):
         self._tip = TipLabel()
         self._tip_texts: dict = {}
         self._app_log: list = []
+        self._by_msgid: dict = {}
 
         # 固定画布 + 等比缩放
         self._design = QWidget()
@@ -989,7 +991,7 @@ class MainWindow(QMainWindow):
                     labels.append("导出评论区列表")
                 else:
                     labels.append("下载帖子媒体")
-            job = Job(disp, url, cmds, labels)
+            job = Job(disp, url, cmds, labels, parsed.message_id or 0)
             job.qrow = self._add_queue_row(disp, li)
             job.qrow.pct.setText("排队")
             self._jobs.append(job)
@@ -998,17 +1000,110 @@ class MainWindow(QMainWindow):
         if not self._jobs or self._total_tasks == 0:
             return
 
-        # tdl 的 session 是 bolt 数据库，有独占锁：二个进程同时开会报
-        # "Current database is used by another process"。因此这里必须串行执行。
-        # （若需真正的并发，只能用单进程 + 多个 -u + -l N，见说明。）
-        self._max_parallel = 1
         self._update_ui_running(True)
         self._txt_output.clear()
-        self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
         self._lbl_qcount.setText(f"0/{len(self._jobs)} 活动")
         self._lbl_sstate.setText("状态: 下载中")
         self._select_job(0)
-        self._pump()
+
+        # 评论区下载需要逐链接 export，不能用单进程批量；否则用 tdl 内建并发
+        if self._chk_comments.isChecked():
+            self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
+            self._max_parallel = 1   # tdl session 独占锁，进程必须串行
+            self._pump()
+        else:
+            self._start_batch(lines)
+
+    def _start_batch(self, lines):
+        """单进程 + 多个 -u + -l N，使用 tdl 内建并发。"""
+        conf = self._config
+        args = ["dl"]
+        for u in lines:
+            args += ["-u", u]
+        args += ["-d", conf.download_dir]
+        if conf.proxy_enabled and conf.proxy:
+            args += ["--proxy", conf.proxy]
+        args += ["-t", str(conf.threads)]
+        args += ["-l", str(max(1, conf.limit))]
+        tpl = conf.filename_template or "{{ filenamify .FileName }}"
+        if self._chk_subfolder.isChecked():
+            tpl = "{{ .DialogID }}/{{ .MessageID }}/" + tpl
+        args += ["--template", tpl]
+        ext_map = {"images": "jpg,png,gif,webp,jpeg",
+                   "videos": "mp4,mkv,mov,avi,webm,flv",
+                   "audio": "mp3,ogg,wav,flac,aac,m4a,wma"}
+        if conf.content_type in ext_map:
+            args += ["-i", ext_map[conf.content_type]]
+        elif conf.content_type == "custom" and conf.custom_extensions:
+            args += ["-i", conf.custom_extensions]
+        if conf.skip_same:
+            args += ["--skip-same"]
+        if conf.resume:
+            args += ["--continue"]
+        if conf.takeout:
+            args += ["--takeout"]
+        if conf.group:
+            args += ["--group"]
+
+        self._by_msgid = {}
+        for j in self._jobs:
+            j.status = "running"
+            if j.msgid:
+                self._by_msgid[j.msgid] = j
+            if j.qrow is not None:
+                j.qrow.set_status("running")
+        self._batch_args = args
+        self._lbl_status.setText(f"批量下载中 · {len(self._jobs)} 链接 · 并发 {conf.limit}")
+        self._runner = TdlRunner(self._tdl_path)
+        self._runner.on_stdout = self._on_batch_output
+        self._runner.on_stderr = self._on_batch_output
+        self._runner.on_exit = self._on_batch_exit
+        self._runner.start(args)
+
+    def _on_batch_output(self, text):
+        for frame in text.split("\r"):
+            frame = frame.strip()
+            if frame:
+                self._process_batch_frame(frame)
+
+    def _process_batch_frame(self, frame):
+        clean = ANSI.sub("", frame).strip()
+        if not clean:
+            return
+        low = clean.lower()
+        if self._is_progress(clean):
+            m = re.search(r"\((\d+)\):(\d+)", clean)
+            job = self._by_msgid.get(int(m.group(2))) if m else None
+            if job is not None:
+                self._apply_progress_frame(job, clean)
+                if job.qrow is not None:
+                    job.qrow.set_pct(job.pct)
+                if job is self._selected_job():
+                    self._refresh_detail_progress(job)
+            return
+        if clean.lstrip().startswith("CPU:"):
+            return
+        self._app_log.append(clean)
+        self._append_log(clean)
+        if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
+            if not self._btn_log.isChecked():
+                self._btn_log.setChecked(True)
+
+    def _on_batch_exit(self, code):
+        self._update_ui_running(False)
+        ok = 0
+        for j in self._jobs:
+            if j.status == "running":
+                j.status = "done" if code == 0 else "failed"
+                if code == 0:
+                    j.pct = 100
+                    ok += 1
+                self._update_job_row(j)
+        self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
+        self._lbl_sstate.setText("状态: 完成" if code == 0 else "状态: 失败")
+        self._app_log.append(f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接 ━━")
+        self._refresh_active_count()
+        self._show_detail(self._selected_job())
 
     def _pump(self):
         active = sum(1 for j in self._jobs if j.status == "running")
@@ -1104,15 +1199,7 @@ class MainWindow(QMainWindow):
             return
         low = clean.lower()
         if self._is_progress(clean):
-            job.parser.feed(clean)
-            if job.parser.percent is not None:
-                job.pct = min(100, max(0, int(job.parser.percent)))
-            if job.parser.speed:
-                job.speed = job.parser.speed
-            m = re.search(r"ETA[:：]?\s*([0-9][0-9hmsHMS.]*)", clean)
-            if m:
-                job.eta = m.group(1)
-            self._job_feed_file(job, clean)
+            self._apply_progress_frame(job, clean)
             if not job.channel:
                 mm = re.match(r"^(.+?)\(\d+\):\d+", clean.lstrip())
                 if mm:
@@ -1132,6 +1219,20 @@ class MainWindow(QMainWindow):
         if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
             if not self._btn_log.isChecked():
                 self._btn_log.setChecked(True)
+
+    def _apply_progress_frame(self, job, clean):
+        job.parser.feed(clean)
+        if job.parser.percent is not None:
+            job.pct = min(100, max(0, int(job.parser.percent)))
+        spd = job.parser.speed
+        if spd and ";" in spd:
+            spd = spd.rsplit(";", 1)[-1].strip()
+        if spd:
+            job.speed = spd
+        m = re.search(r"ETA[:：]?\s*([0-9][0-9hmsHMS.:]*)", clean)
+        if m:
+            job.eta = m.group(1)
+        self._job_feed_file(job, clean)
 
     def _job_feed_file(self, job, clean):
         m = re.match(r"^(?P<name>.+?)\s+(?P<pct>\d+(?:\.\d+)?)%\s*\[", clean)
