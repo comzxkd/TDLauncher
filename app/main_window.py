@@ -4,15 +4,15 @@ import re
 import sys
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer, QEvent, QRectF, QVariantAnimation, QEasingCurve
-from PySide6.QtGui import QFont, QColor, QPainter
+from PySide6.QtCore import Qt, QTimer, QEvent, QRectF, QPointF, QVariantAnimation, QEasingCurve
+from PySide6.QtGui import QFont, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QTextEdit, QLineEdit, QPushButton,
-    QComboBox, QSpinBox, QFrame, QProgressBar,
+    QComboBox, QSpinBox, QFrame, QProgressBar, QStyle, QStyleOptionComboBox, QStylePainter,
     QFileDialog, QMessageBox,
-    QGraphicsView, QGraphicsScene, QGraphicsDropShadowEffect,
+    QGraphicsView, QGraphicsScene, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
     QScrollArea, QSizePolicy,
 )
 
@@ -47,105 +47,163 @@ def _find_tdl() -> Optional[str]:
     return None
 
 
-# ---- 终端配色 ----
-BG = "#090C0A"
-PANEL = "#101612"
-WELL = "#080D0A"
-INK = "#D5E8D7"
-DIM = "#819487"
-ACC = "#71E59A"
-ON = "#07110B"
-LINE = "#26382D"
-WARN = "#E8B66B"
-FAIL = "#EE7777"
+# ---- 精密控制台配色（单一强调色 + 分层中性灰）----
+BG = "#0B0D0E"      # 深空灰底
+PANEL = "#121517"   # 面板
+PANEL2 = "#171B1E"  # 抬升层（hover / 弹出 / 按下）
+WELL = "#0D1012"    # 输入井
+LINE = "#242A2F"    # 描边
+LINE2 = "#323A41"   # hover 描边
+INK = "#E4E9EE"     # 主文字
+DIM = "#8A94A0"     # 次文字
+FAINT = "#5A636D"   # 占位 / 禁用
+ACC = "#4ADE80"     # 荧光绿（唯一强调色：状态 / 进度 / 焦点）
+ACC_HI = "#7CF0A6"  # 强调色亮端（渐变 / hover）
+ACC_LINE = "#3E6B4E"  # 强调色描边（40% 感）
+ACC_BG = "rgba(74, 222, 128, 0.10)"   # 强调色底
+ACC_BG_ROW = "rgba(74, 222, 128, 0.055)"  # 选中行底
+ON = "#06130B"      # 强调色上的文字
+DONE = "#3E8E62"    # 完成（低饱和绿）
+WARN = "#E5B567"
+FAIL = "#F87171"
+FAIL_LINE = "#5C3A3F"
+FAIL_BG = "rgba(248, 113, 113, 0.08)"
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 QSS = f"""
 #Root {{ background: {BG}; }}
-#Root * {{ color: {INK}; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 14px; }}
+#Root * {{ color: {INK}; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 13px; }}
 QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Consolas, "Cascadia Mono", monospace; }}
 
-#Hdr, #Panel {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 6px; }}
-#Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 1px; }}
+#Hdr {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #161A1E, stop:0.15 {PANEL}, stop:1 #0F1214);
+  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 10px;
+}}
+#Panel {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #15191C, stop:0.12 {PANEL}, stop:1 #0F1214);
+  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 10px;
+}}
+#Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 2px; }}
 #Path {{ color: {DIM}; font-size: 12px; }}
-#SecTitle {{ color: {DIM}; font-size: 12px; font-weight: 600; letter-spacing: 1px; }}
-#SecCount {{ color: {ACC}; font-size: 12px; font-weight: 600; }}
-#FieldLabel {{ color: {DIM}; font-size: 12px; }}
+#SecTitle {{ color: {DIM}; font-size: 11px; font-weight: 700; letter-spacing: 2px; }}
+#SecCount {{ color: {ACC}; font-size: 12px; font-weight: 700; }}
+#FieldLabel {{ color: {DIM}; font-size: 11px; letter-spacing: 1px; }}
 #Recog {{ color: {DIM}; font-size: 12px; }}
-#BigTitle {{ font-size: 17px; font-weight: 700; }}
+#BigTitle {{ font-size: 18px; font-weight: 700; }}
 #BigUrl {{ color: {DIM}; font-size: 12px; }}
-#BigPct {{ font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 42px; font-weight: 700; }}
-#BigPctUnit {{ color: {DIM}; font-size: 15px; }}
+#BigPct {{ font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 44px; font-weight: 700; }}
+#BigPctUnit {{ color: {DIM}; font-size: 16px; }}
 #Meta {{ color: {DIM}; font-size: 12px; }}
 #MetaVal {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
-#Badge {{ color: {ACC}; border: 1px solid {LINE}; border-radius: 4px; padding: 3px 9px; font-size: 12px; font-weight: 600; }}
-#Badge[status="running"] {{ color: {ACC}; border-color: #45634D; background: #142019; }}
-#Badge[status="done"] {{ color: {DIM}; border-color: {LINE}; }}
-#Badge[status="failed"], #Badge[status="stopped"] {{ color: {FAIL}; border-color: #583636; background: #211516; }}
+#Badge {{ color: {DIM}; border: 1px solid {LINE}; border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }}
+#Badge[status="running"] {{ color: {ACC}; border-color: {ACC_LINE}; background: {ACC_BG}; }}
+#Badge[status="done"] {{ color: {DONE}; border-color: {LINE}; }}
+#Badge[status="failed"], #Badge[status="stopped"] {{ color: {FAIL}; border-color: {FAIL_LINE}; background: {FAIL_BG}; }}
 #Stat {{ color: {DIM}; font-size: 12px; }}
-#StatVal {{ color: {ACC}; font-size: 12px; font-weight: 600; }}
-#LogTitle {{ color: {DIM}; font-size: 12px; letter-spacing: 1px; }}
-#LogToggle {{ background: transparent; border: none; color: {DIM}; font-size: 12px; letter-spacing: 1px; padding: 0; text-align: left; }}
+#StatVal {{ color: {ACC}; font-size: 12px; font-weight: 700; }}
+#LogTitle {{ color: {DIM}; font-size: 11px; letter-spacing: 1px; }}
+#LogToggle {{ background: transparent; border: none; color: {DIM}; font-size: 11px; letter-spacing: 2px; padding: 0; text-align: left; }}
 #LogToggle:hover {{ color: {ACC}; }}
 
 QTextEdit, QLineEdit, QComboBox, QSpinBox {{
-  background: {WELL}; border: 1px solid {LINE}; border-radius: 4px; color: {INK};
+  background: {WELL};
+  border: 1px solid {LINE}; border-radius: 6px; color: {INK};
   selection-background-color: {ACC}; selection-color: {ON};
 }}
-QTextEdit {{ padding: 7px 10px; }}
-QLineEdit, QComboBox, QSpinBox {{ padding: 6px 9px; }}
+QTextEdit {{ padding: 8px 11px; }}
+QLineEdit, QComboBox, QSpinBox {{ padding: 6px 10px; min-height: 34px; }}
+QTextEdit:hover, QLineEdit:hover, QComboBox:hover, QSpinBox:hover {{ border-color: {LINE2}; }}
 QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {ACC}; }}
-QComboBox::drop-down {{ border: none; width: 20px; }}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {FAINT}; border-color: {LINE}; background: #0B0E10; }}
+QComboBox {{ padding-right: 32px; }}
+QComboBox::drop-down {{
+  subcontrol-origin: padding; subcontrol-position: top right; width: 30px;
+  background: {PANEL2}; border: none; border-left: 1px solid {LINE};
+  border-top-right-radius: 6px; border-bottom-right-radius: 6px;
+}}
 QComboBox QAbstractItemView {{
-  background: {PANEL}; border: 1px solid {LINE}; color: {INK};
-  selection-background-color: #20392A; selection-color: {INK}; outline: none;
+  background: {PANEL2}; border: 1px solid {LINE2}; color: {INK};
+  selection-background-color: rgba(74, 222, 128, 0.14); selection-color: {INK}; outline: none;
 }}
 QSpinBox::up-button, QSpinBox::down-button {{ width: 0; height: 0; border: none; }}
 
 QPushButton {{
-  background: #151D17; color: {INK}; border: 1px solid {LINE}; border-radius: 4px; padding: 8px 14px;
+  background: transparent; color: {INK};
+  border: 1px solid {LINE}; border-radius: 6px; padding: 6px 16px; min-height: 34px;
 }}
-QPushButton:hover {{ background: #1A261D; border-color: #45634D; }}
-QPushButton:pressed {{ background: #223629; color: {ACC}; }}
-QPushButton:disabled {{ background: #101510; color: #58645A; border-color: #202A22; }}
-QPushButton#Primary {{ background: {ACC}; color: {ON}; border-color: {ACC}; font-weight: 700; }}
-QPushButton#Primary:hover {{ background: #8AF0AA; border-color: #8AF0AA; }}
-QPushButton#Primary:disabled {{ background: #26392C; color: #69766C; border-color: #26392C; }}
-QPushButton#Stop {{ color: {WARN}; border-color: #55452E; font-weight: 600; background: #1D1912; }}
-QPushButton#Stop:hover {{ background: #332719; border-color: {WARN}; }}
-QPushButton#Stop:disabled {{ color: #6C6252; border-color: #302A20; background: #15130F; }}
-QPushButton#Toggle {{ padding: 5px 9px; color: {DIM}; border-color: {LINE}; font-size: 12px; }}
-QPushButton#Toggle:checked {{ color: {ACC}; background: #17251B; border-color: #45634D; }}
+QPushButton:hover {{ background: {PANEL2}; border-color: {LINE2}; }}
+QPushButton:pressed {{ background: {PANEL2}; color: {ACC}; border-color: {ACC_LINE}; }}
+QPushButton:disabled {{ background: transparent; color: {FAINT}; border-color: {LINE}; }}
+QPushButton#Primary {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {ACC_HI}, stop:1 {ACC}); color: {ON}; border-color: {ACC_HI}; font-weight: 700; }}
+QPushButton#Primary:hover {{ background: {ACC_HI}; border-color: #A6F5C3; }}
+QPushButton#Primary:pressed {{ background: {ACC}; }}
+QPushButton#Primary:disabled {{ background: #1C2B22; color: #4E5F54; border-color: #1C2B22; }}
+QPushButton#Stop {{ color: {WARN}; border-color: #4A4030; font-weight: 600; }}
+QPushButton#Stop:hover {{ background: rgba(229, 181, 103, 0.08); border-color: {WARN}; }}
+QPushButton#Stop:pressed {{ background: rgba(229, 181, 103, 0.14); color: {WARN}; border-color: {WARN}; }}
+QPushButton#Stop:disabled {{ color: {FAINT}; border-color: {LINE}; background: transparent; }}
+QPushButton#Toggle {{
+  padding: 6px 12px; color: {DIM}; border: 1px solid {LINE};
+  border-radius: 6px; background: transparent; font-size: 13px; min-height: 34px;
+}}
+QPushButton#Toggle:hover {{ color: {INK}; border-color: {LINE2}; background: {PANEL2}; }}
+QPushButton#Toggle:checked {{
+  color: {ACC}; background: {ACC_BG};
+  border-color: {ACC_LINE}; font-weight: 700;
+}}
 
-QProgressBar {{ background: {WELL}; border: none; border-radius: 2px; }}
-QProgressBar::chunk {{ background: {ACC}; border-radius: 2px; }}
-QProgressBar[status="done"]::chunk {{ background: #5FAE79; }}
+QMenu {{ background: {PANEL2}; color: {INK}; border: 1px solid {LINE2}; padding: 4px; border-radius: 6px; }}
+QMenu::item {{ background: transparent; color: {INK}; padding: 6px 28px 6px 10px; border-radius: 4px; }}
+QMenu::item:selected {{ background: rgba(74, 222, 128, 0.14); color: {ACC}; }}
+QMenu::item:disabled {{ color: {FAINT}; }}
+QMenu::separator {{ height: 1px; background: {LINE}; margin: 4px 6px; }}
+
+QProgressBar {{ background: #171C20; border: none; border-radius: 2px; }}
+QProgressBar::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ACC}, stop:1 {ACC_HI}); border-radius: 2px; }}
+QProgressBar[status="done"]::chunk {{ background: {DONE}; }}
 QProgressBar[status="failed"]::chunk {{ background: {FAIL}; }}
-QProgressBar[status="stopped"]::chunk {{ background: #68736B; }}
+QProgressBar[status="stopped"]::chunk {{ background: {FAINT}; }}
 
-#QRow {{ background: transparent; border: none; border-left: 2px solid transparent; border-radius: 4px; }}
-#QRow[active="true"] {{ background: #17251B; border-left: 2px solid {ACC}; }}
-#QRow[status="done"] #QMarker {{ color: #6FA982; }}
-#QRow[status="failed"] #QMarker {{ color: {FAIL}; }}
-#QRow[status="stopped"] #QMarker {{ color: {DIM}; }}
-#QMarker {{ color: {DIM}; }}
-#QRow[active="true"] #QMarker {{ color: {ACC}; }}
+#QRow {{ background: transparent; border: none; border-radius: 6px; }}
+#QRow:hover {{ background: {PANEL2}; }}
+#QRow[active="true"] {{ background: {ACC_BG_ROW}; }}
 #QName {{ color: {INK}; font-size: 13px; }}
-#QRow[active="true"] #QName {{ color: {ACC}; font-weight: 600; }}
+#QRow[active="true"] #QName {{ color: {ACC}; font-weight: 700; }}
 #QPct {{ color: {DIM}; font-size: 12px; }}
 #FName {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
-#FInfo {{ color: {DIM}; font-size: 11px; }}
+#FInfo {{ color: {DIM}; font-size: 12px; }}
 
 #Scroll {{ background: transparent; border: none; }}
 #Scroll > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; border: none; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: #314438; border-radius: 4px; min-height: 24px; }}
-QScrollBar::handle:vertical:hover {{ background: #496552; }}
+QScrollBar::handle:vertical {{ background: {LINE2}; border-radius: 4px; min-height: 24px; }}
+QScrollBar::handle:vertical:hover {{ background: #45505A; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QLabel {{ background: transparent; }}
 """
+
+
+class ComboBox(QComboBox):
+    """带清晰箭头槽的下拉框。"""
+
+    def paintEvent(self, event) -> None:
+        painter = QStylePainter(self)
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        option.subControls &= ~QStyle.SC_ComboBoxArrow
+        painter.drawComplexControl(QStyle.CC_ComboBox, option)
+        painter.drawControl(QStyle.CE_ComboBoxLabel, option)
+
+        arrow = self.rect().adjusted(self.width() - 30, 1, -1, -1)
+        painter.fillRect(arrow, QColor(PANEL2))
+        painter.setPen(QPen(QColor(LINE), 1))
+        painter.drawLine(arrow.topLeft(), arrow.bottomLeft())
+        painter.setPen(QPen(QColor(ACC_HI if self.underMouse() else ACC), 2))
+        center = QPointF(arrow.center().x(), arrow.center().y() - 1)
+        painter.drawLine(QPointF(center.x() - 4, center.y() - 2), QPointF(center.x(), center.y() + 2))
+        painter.drawLine(QPointF(center.x(), center.y() + 2), QPointF(center.x() + 4, center.y() - 2))
 
 
 class TipLabel(QLabel):
@@ -156,8 +214,8 @@ class TipLabel(QLabel):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setObjectName("Tip")
         self.setStyleSheet(
-            f"#Tip {{ background:{PANEL}; color:{INK}; border:1px solid {ACC}; "
-            f"padding:7px 11px; font-family:Consolas,'Microsoft YaHei UI',monospace; font-size:13px; }}"
+            f"#Tip {{ background:{PANEL2}; color:{INK}; border:1px solid {ACC_LINE}; border-radius:6px; "
+            f"padding:7px 11px; font-family:Consolas,'Microsoft YaHei UI',monospace; font-size:12px; }}"
         )
         sh = QGraphicsDropShadowEffect(self)
         sh.setBlurRadius(20)
@@ -205,21 +263,68 @@ class CellsBar(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         bounds = self.rect().adjusted(0, 1, 0, -1)
-        gap = 3
+        gap = 4
         cell_width = max(1.0, (bounds.width() - gap * (self._count - 1)) / self._count)
         on = self._display_value / 100.0 * self._count
         active = QColor(ACC)
-        active.setAlpha(48)
+        active.setAlpha(90)
         painter.setPen(Qt.NoPen)
         for i in range(self._count):
             x = bounds.x() + i * (cell_width + gap)
             rect = QRectF(x, bounds.y(), cell_width, bounds.height())
-            painter.setBrush(QColor(LINE))
-            painter.drawRoundedRect(rect, 2, 2)
+            painter.setBrush(QColor("#1B2126"))
+            painter.drawRoundedRect(rect, 2.5, 2.5)
             fill = max(0.0, min(1.0, on - i))
             if fill > 0:
                 painter.setBrush(active if fill < 1 else QColor(ACC))
-                painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2, 2)
+                painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2.5, 2.5)
+
+
+class StatusMark(QWidget):
+    """队列行状态图标：矢量绘制，粗细对齐，不用文本符号。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(14, 14)
+        self._status = "queued"
+        self._active = False
+
+    def set_status(self, status: str) -> None:
+        self._status = status
+        self.update()
+
+    def set_active(self, on: bool) -> None:
+        self._active = on
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        color = {"running": ACC, "done": DONE, "failed": FAIL,
+                 "stopped": DIM}.get(self._status, ACC if self._active else DIM)
+        pen = QPen(QColor(color), 1.6)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        c = self.rect().center()
+        if self._status == "running":
+            painter.setBrush(QColor(color))
+            painter.drawPolygon([QPointF(c.x() - 3, c.y() - 4),
+                                 QPointF(c.x() - 3, c.y() + 4),
+                                 QPointF(c.x() + 4.5, c.y())])
+        elif self._status == "done":
+            painter.drawPolyline([QPointF(c.x() - 4.5, c.y() + 0.5),
+                                  QPointF(c.x() - 1, c.y() + 4),
+                                  QPointF(c.x() + 5, c.y() - 4)])
+        elif self._status == "failed":
+            painter.drawLine(QPointF(c.x() - 4, c.y() - 4), QPointF(c.x() + 4, c.y() + 4))
+            painter.drawLine(QPointF(c.x() + 4, c.y() - 4), QPointF(c.x() - 4, c.y() + 4))
+        elif self._status == "stopped":
+            painter.setBrush(QColor(color))
+            painter.drawRoundedRect(QRectF(c.x() - 3.5, c.y() - 3.5, 7, 7), 1.5, 1.5)
+        else:
+            painter.drawEllipse(QPointF(c.x(), c.y()), 4, 4)
 
 
 class QueueRow(QFrame):
@@ -248,14 +353,12 @@ class QueueRow(QFrame):
         h = QHBoxLayout()
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(8)
-        self.marker = QLabel("◦")
-        self.marker.setObjectName("QMarker")
-        self.marker.setFixedWidth(12)
+        self.marker = StatusMark()
         self.name = QLabel(name)
         self.name.setObjectName("QName")
         self.pct = QLabel("")
         self.pct.setObjectName("QPct")
-        h.addWidget(self.marker)
+        h.addWidget(self.marker, 0, Qt.AlignVCenter)
         h.addWidget(self.name, 1)
         h.addWidget(self.pct)
         v.addLayout(h)
@@ -294,12 +397,13 @@ class QueueRow(QFrame):
             self._row_animation.setStartValue(self._row_opacity)
             self._row_animation.setEndValue(1.0 if on else 0.0)
             self._row_animation.start()
+        self.marker.set_active(on)
         self.setProperty("active", "true" if on else "false")
         self.style().unpolish(self)
         self.style().polish(self)
 
     def set_status(self, status: str) -> None:
-        self.marker.setText({"running": "▸", "done": "✓", "failed": "✗", "stopped": "■"}.get(status, "◦"))
+        self.marker.set_status(status)
         self.setProperty("status", status)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -441,7 +545,6 @@ class MainWindow(QMainWindow):
         self._detail_files: dict = {}
         self._detail_file_rows: list = []
         self._total_tasks = 0
-        self._completed_tasks = 0
         self._chat_info_cache: dict = {}
         self._tip = TipLabel()
         self._tip_texts: dict = {}
@@ -455,7 +558,7 @@ class MainWindow(QMainWindow):
 
         self._scene = QGraphicsScene()
         self._scene.setSceneRect(0, 0, DESIGN_W, DESIGN_H)
-        self._scene.setBackgroundBrush(QColor("#050505"))
+        self._scene.setBackgroundBrush(QColor(BG))
         self._proxy = self._scene.addWidget(self._design)
 
         self._view = QGraphicsView(self._scene)
@@ -463,7 +566,7 @@ class MainWindow(QMainWindow):
         self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._view.setAlignment(Qt.AlignCenter)
-        self._view.setStyleSheet("background:#050505; border:none;")
+        self._view.setStyleSheet(f"background:{BG}; border:none;")
         self.setCentralWidget(self._view)
 
         self._apply_theme()
@@ -474,7 +577,8 @@ class MainWindow(QMainWindow):
         self.resize(w, round(w / ASPECT))
 
         self._apply_config()
-        self._update_status_bar()
+        if self._tdl_path:
+            QTimer.singleShot(60, self._load_tdl_version)
 
         if not self._tdl_path:
             QMessageBox.warning(self, "TDLauncher", "未找到 tdl.exe，请确认安装路径。")
@@ -504,11 +608,19 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self):
         self._design.setStyleSheet(QSS)
+        pal = self._design.palette()
+        pal.setColor(pal.ColorRole.PlaceholderText, QColor(FAINT))
+        self._design.setPalette(pal)
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(
-                f"QToolTip {{ background:{PANEL}; color:{INK}; border:1px solid {ACC}; "
-                f"padding:6px 9px; font-family:Consolas,'Microsoft YaHei UI',monospace; font-size:13px; }}"
+                f"QToolTip {{ background:{PANEL2}; color:{INK}; border:1px solid {ACC_LINE}; border-radius:6px; "
+                f"padding:6px 9px; font-family:Consolas,'Microsoft YaHei UI',monospace; font-size:12px; }}"
+                f"QMenu {{ background:{PANEL2}; color:{INK}; border:1px solid {LINE2}; padding:4px; border-radius:6px; }}"
+                f"QMenu::item {{ background:transparent; color:{INK}; padding:6px 28px 6px 10px; border-radius:4px; }}"
+                f"QMenu::item:selected {{ background:rgba(74,222,128,0.14); color:{ACC}; }}"
+                f"QMenu::item:disabled {{ color:{FAINT}; }}"
+                f"QMenu::separator {{ height:1px; background:{LINE}; margin:4px 6px; }}"
             )
 
     # ---- 悬浮提示（带阴影）----
@@ -543,19 +655,13 @@ class MainWindow(QMainWindow):
         return w
 
     def _toggle(self, text: str, checked: bool = False, tip: str = "") -> QPushButton:
-        b = QPushButton()
+        b = QPushButton(text)
         b.setObjectName("Toggle")
         b.setCheckable(True)
         b.setChecked(checked)
         if tip:
             self._tip_texts[b] = tip
             b.installEventFilter(self)
-
-        def sync():
-            b.setText(("[×] " if b.isChecked() else "[ ] ") + text)
-
-        b.toggled.connect(sync)
-        sync()
         return b
 
     def _scroll(self) -> tuple[QScrollArea, QVBoxLayout]:
@@ -581,15 +687,15 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         root = QVBoxLayout(self._design)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(9)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
 
         # ---- 顶栏 ----
         hdr = QFrame()
         hdr.setObjectName("Hdr")
         hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(12, 8, 12, 8)
-        self._lbl_brand = QLabel('▚ TDLauncher<span style="color:%s">_</span>' % ACC)
+        hl.setContentsMargins(16, 10, 16, 10)
+        self._lbl_brand = QLabel('TDLauncher<span style="color:%s">_</span>' % ACC)
         self._lbl_brand.setObjectName("Brand")
         hl.addWidget(self._lbl_brand)
         hl.addStretch(1)
@@ -599,21 +705,21 @@ class MainWindow(QMainWindow):
         root.addWidget(hdr)
 
         body = QHBoxLayout()
-        body.setSpacing(9)
+        body.setSpacing(12)
         root.addLayout(body, 1)
 
         # 左：下载链接
         links = QFrame()
         links.setObjectName("Panel")
         ll = QVBoxLayout(links)
-        ll.setContentsMargins(12, 10, 12, 10)
-        ll.setSpacing(8)
+        ll.setContentsMargins(16, 14, 16, 14)
+        ll.setSpacing(10)
         t = QLabel("下载链接 · 每行一个任务")
         t.setObjectName("SecTitle")
         ll.addWidget(t)
         self._txt_links = QTextEdit()
         self._txt_links.setPlaceholderText("https://t.me/telegram/193")
-        self._txt_links.setFont(QFont("Consolas", 10))
+        self._txt_links.setFont(QFont("Consolas", 12))
         self._txt_links.textChanged.connect(self._on_links_changed)
         ll.addWidget(self._txt_links, 1)
         lfoot = QHBoxLayout()
@@ -625,40 +731,45 @@ class MainWindow(QMainWindow):
         self._btn_clear.clicked.connect(self._txt_links.clear)
         lfoot.addWidget(self._btn_clear, 0, Qt.AlignBottom)
         ll.addLayout(lfoot)
-        body.addWidget(links, 1)
+        body.addWidget(links, 5)
 
         right = QVBoxLayout()
-        right.setSpacing(9)
-        body.addLayout(right, 3)
+        right.setSpacing(12)
+        body.addLayout(right, 14)
 
         # 参数
         params = QFrame()
         params.setObjectName("Panel")
         pl = QVBoxLayout(params)
-        pl.setContentsMargins(12, 10, 12, 10)
-        pl.setSpacing(9)
+        pl.setContentsMargins(16, 14, 16, 14)
+        pl.setSpacing(10)
+        params_title = QLabel("下载参数")
+        params_title.setObjectName("SecTitle")
+        pl.addWidget(params_title)
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(8)
-        for i, s in enumerate([14, 10, 11, 7, 7]):
+        grid.setVerticalSpacing(10)
+        for i, s in enumerate([16, 12, 12, 8, 8]):
             grid.setColumnStretch(i, s)
 
-        self._combo_content = QComboBox()
+        self._combo_content = ComboBox()
         self._combo_content.addItems(["全部媒体", "仅图片", "仅视频", "仅音频", "自定义"])
         self._combo_content.currentIndexChanged.connect(self._on_content_type_changed)
         grid.addWidget(self._field("内容类型", self._combo_content), 0, 0)
         self._txt_custom_ext = QLineEdit()
         self._txt_custom_ext.setPlaceholderText("jpg,png,mp4")
         grid.addWidget(self._field("自定义扩展名", self._txt_custom_ext), 0, 1)
-        self._combo_template = QComboBox()
+        self._combo_template = ComboBox()
         self._combo_template.addItems(["原始文件名", "tdl 默认"])
         self._combo_template.currentIndexChanged.connect(self._on_template_changed)
         grid.addWidget(self._field("文件名", self._combo_template), 0, 2)
         self._spin_threads = QSpinBox()
         self._spin_threads.setRange(1, 32)
+        self._spin_threads.setMinimumWidth(64)
         grid.addWidget(self._field("线程", self._spin_threads), 0, 3)
         self._spin_limit = QSpinBox()
         self._spin_limit.setRange(1, 16)
+        self._spin_limit.setMinimumWidth(64)
         grid.addWidget(self._field("并发", self._spin_limit), 0, 4)
 
         dirw = QWidget()
@@ -679,14 +790,14 @@ class MainWindow(QMainWindow):
         pl.addLayout(grid)
 
         toggles = QHBoxLayout()
-        toggles.setSpacing(6)
-        self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件")
-        self._chk_subfolder = self._toggle("自动归档", tip="按频道显示名 + 消息 ID 自动归档")
-        self._chk_skip_same = self._toggle("跳过同名")
-        self._chk_resume = self._toggle("断点续传")
-        self._chk_takeout = self._toggle("Takeout", tip="使用 Takeout 会话下载，可降低限流惩罚")
-        self._chk_group = self._toggle("探测分组")
-        self._chk_proxy = self._toggle("代理")
+        toggles.setSpacing(8)
+        self._chk_comments = self._toggle("评论区下载", tip="下载帖子媒体后，继续导出并下载该帖评论中的媒体。")
+        self._chk_subfolder = self._toggle("按帖归档", tip="将每条链接的媒体保存到“频道名称/消息 ID”独立目录。")
+        self._chk_skip_same = self._toggle("跳过重复文件", tip="跳过下载目录中已存在且名称、大小相同的文件。")
+        self._chk_resume = self._toggle("断点续传", tip="继续下载未完成的文件，避免从头重新传输。")
+        self._chk_takeout = self._toggle("Takeout 模式", tip="使用 Telegram Takeout 会话下载，适合批量获取媒体。")
+        self._chk_group = self._toggle("下载相册分组", tip="识别并按 Telegram 媒体组处理相册内容。")
+        self._chk_proxy = self._toggle("启用代理", tip="通过下方填写的代理地址连接 Telegram。")
         for w in (self._chk_comments, self._chk_subfolder, self._chk_skip_same,
                   self._chk_resume, self._chk_takeout, self._chk_group, self._chk_proxy):
             toggles.addWidget(w)
@@ -696,17 +807,17 @@ class MainWindow(QMainWindow):
 
         # 中段
         work = QHBoxLayout()
-        work.setSpacing(9)
+        work.setSpacing(12)
         right.addLayout(work, 1)
 
         # 队列
         queue = QFrame()
         queue.setObjectName("Panel")
         ql = QVBoxLayout(queue)
-        ql.setContentsMargins(12, 10, 12, 10)
-        ql.setSpacing(6)
+        ql.setContentsMargins(16, 14, 16, 14)
+        ql.setSpacing(8)
         qhead = QHBoxLayout()
-        qh = QLabel("队列")
+        qh = QLabel("下载队列")
         qh.setObjectName("SecTitle")
         qhead.addWidget(qh)
         qhead.addStretch(1)
@@ -716,14 +827,17 @@ class MainWindow(QMainWindow):
         ql.addLayout(qhead)
         self._queue_scroll, self._queue_box = self._scroll()
         ql.addWidget(self._queue_scroll, 1)
-        work.addWidget(queue, 2)
+        work.addWidget(queue, 5)
 
         # 进度
         prog = QFrame()
         prog.setObjectName("Panel")
         prl = QVBoxLayout(prog)
-        prl.setContentsMargins(12, 10, 12, 10)
-        prl.setSpacing(9)
+        prl.setContentsMargins(16, 14, 16, 14)
+        prl.setSpacing(10)
+        self._lbl_progress_title = QLabel("下载状态")
+        self._lbl_progress_title.setObjectName("SecTitle")
+        prl.addWidget(self._lbl_progress_title)
 
         dhead = QHBoxLayout()
         dhead.setSpacing(10)
@@ -740,9 +854,9 @@ class MainWindow(QMainWindow):
         prl.addLayout(dhead)
 
         amount = QHBoxLayout()
-        amount.setSpacing(18)
+        amount.setSpacing(20)
         big = QHBoxLayout()
-        big.setSpacing(2)
+        big.setSpacing(3)
         self._lbl_bigpct = QLabel("0")
         self._lbl_bigpct.setObjectName("BigPct")
         self._bigpct_display = 0.0
@@ -756,11 +870,11 @@ class MainWindow(QMainWindow):
         big.addWidget(u, 0, Qt.AlignBottom)
         amount.addLayout(big, 0)
         ar = QVBoxLayout()
-        ar.setSpacing(8)
+        ar.setSpacing(10)
         self._cells = CellsBar(24)
         ar.addWidget(self._cells)
         meta = QHBoxLayout()
-        meta.setSpacing(20)
+        meta.setSpacing(24)
         self._lbl_speed = QLabel("—")
         self._lbl_speed.setObjectName("MetaVal")
         meta.addWidget(self._mkmeta("速度", self._lbl_speed))
@@ -784,7 +898,7 @@ class MainWindow(QMainWindow):
         pfoot.setSpacing(14)
         logcol = QVBoxLayout()
         logcol.setSpacing(6)
-        self._btn_log = QPushButton("tdl 输出 ▾")
+        self._btn_log = QPushButton("下载日志 ▾")
         self._btn_log.setObjectName("LogToggle")
         self._btn_log.setCheckable(True)
         self._btn_log.setChecked(True)
@@ -792,8 +906,8 @@ class MainWindow(QMainWindow):
         logcol.addWidget(self._btn_log, 0, Qt.AlignLeft)
         self._txt_output = QTextEdit()
         self._txt_output.setReadOnly(True)
-        self._txt_output.setFont(QFont("Consolas", 9))
-        self._log_height = 82
+        self._txt_output.setFont(QFont("Consolas", 10))
+        self._log_height = 88
         self._txt_output.setFixedHeight(self._log_height)
         self._txt_output.setVisible(True)
         self._log_animation = QVariantAnimation(self)
@@ -805,8 +919,15 @@ class MainWindow(QMainWindow):
         logcol.addWidget(self._txt_output)
         pfoot.addLayout(logcol, 1)
 
-        self._lbl_status = QLabel("就绪")
+        self._lbl_status = QLabel("就绪", self)
         self._lbl_status.setObjectName("StatVal")
+        self._lbl_status.hide()
+        self._lbl_tdlpath = QLabel("tdl: —", self)
+        self._lbl_tdlpath.setObjectName("Stat")
+        self._lbl_tdlpath.hide()
+        self._lbl_sstate = QLabel("状态: 就绪", self)
+        self._lbl_sstate.setObjectName("Stat")
+        self._lbl_sstate.hide()
 
         rightbtns = QVBoxLayout()
         rightbtns.setSpacing(8)
@@ -828,23 +949,7 @@ class MainWindow(QMainWindow):
         pfoot.addLayout(rightbtns, 0)
         prl.addLayout(pfoot)
 
-        work.addWidget(prog, 5)
-
-        # ---- 状态栏 ----
-        sb = QFrame()
-        sb.setObjectName("Hdr")
-        sbl = QHBoxLayout(sb)
-        sbl.setContentsMargins(12, 6, 12, 6)
-        self._lbl_tdlpath = QLabel("tdl: —")
-        self._lbl_tdlpath.setObjectName("Stat")
-        sbl.addWidget(self._lbl_tdlpath)
-        sbl.addStretch(1)
-        sbl.addWidget(self._lbl_status)
-        sbl.addSpacing(24)
-        self._lbl_sstate = QLabel("状态: 就绪")
-        self._lbl_sstate.setObjectName("Stat")
-        sbl.addWidget(self._lbl_sstate)
-        root.addWidget(sb)
+        work.addWidget(prog, 12)
 
     def _mkmeta(self, label, val_widget):
         w = QWidget()
@@ -867,9 +972,9 @@ class MainWindow(QMainWindow):
 
     def _toggle_log(self, on: bool):
         self._log_animation.stop()
-        self._btn_log.setText("tdl 输出 ▾" if on else "tdl 输出 ▸")
+        self._btn_log.setText("下载日志 ▾" if on else "下载日志 ▸")
         self._log_animation.setStartValue(self._log_height)
-        self._log_animation.setEndValue(82 if on else 0)
+        self._log_animation.setEndValue(88 if on else 0)
         if on:
             self._txt_output.setVisible(True)
         self._log_animation.start()
@@ -1089,6 +1194,7 @@ class MainWindow(QMainWindow):
         self._lbl_badge.setProperty("status", job.status)
         self._lbl_badge.style().unpolish(self._lbl_badge)
         self._lbl_badge.style().polish(self._lbl_badge)
+        self._set_badge_breathing(job.status == "running")
         self._animate_bigpct(job.pct)
         self._cells.setValue(job.pct)
         self._lbl_speed.setText(job.speed or "—")
@@ -1097,7 +1203,7 @@ class MainWindow(QMainWindow):
             self._ensure_detail_file(name, pct)
         self._sync_filecount(job)
         self._txt_output.setPlainText("\n".join(self._app_log + job.log))
-        self._btn_log.setText("tdl 输出 ▾" if self._btn_log.isChecked() else "tdl 输出 ▸")
+        self._btn_log.setText("下载日志 ▾" if self._btn_log.isChecked() else "下载日志 ▸")
 
     def _refresh_detail_progress(self, job):
         self._animate_bigpct(job.pct)
@@ -1138,7 +1244,6 @@ class MainWindow(QMainWindow):
         self._clear_layout(self._files_box, self._detail_file_rows)
         self._detail_files = {}
         self._total_tasks = 0
-        self._completed_tasks = 0
         self._sel = 0
 
         for li, url in enumerate(lines):
@@ -1177,11 +1282,9 @@ class MainWindow(QMainWindow):
         self._update_ui_running(True)
         self._txt_output.clear()
         self._lbl_qcount.setText(f"0/{len(self._jobs)} 活动")
-        self._lbl_sstate.setText("状态: 下载中")
         self._select_job(0)
 
         # tdl 的 session 是独占锁，多个进程不能同时开，因此逐条串行执行
-        self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
         self._max_parallel = 1
         self._pump()
 
@@ -1202,6 +1305,8 @@ class MainWindow(QMainWindow):
         if job.qrow is not None:
             job.qrow.set_status("running")
         self._refresh_active_count()
+        if job is self._selected_job():
+            self._show_detail(job)
         self._run_job_cmd(job)
 
     def _run_job_cmd(self, job):
@@ -1234,7 +1339,6 @@ class MainWindow(QMainWindow):
         skipped_comment_stage = export_empty or no_comment_group
         if code == 0 or skipped_comment_stage:
             job.done += 1
-            self._completed_tasks += 1
             if 0 <= job.cur < len(job.stage_progress):
                 job.stage_progress[job.cur] = 100.0
             # 下载命令成功后，只将本命令观察到的文件标记为完成。
@@ -1246,7 +1350,6 @@ class MainWindow(QMainWindow):
         job.cur += 1
         if skip_index == job.cur:
             job.done += 1
-            self._completed_tasks += 1
             job.stage_progress[job.cur] = 100.0
             message = "评论区没有可下载媒体，已跳过下载" if export_empty else "帖子没有关联评论区，已跳过评论下载"
             job.log.append(message)
@@ -1254,11 +1357,9 @@ class MainWindow(QMainWindow):
                 self._append_log(message)
             job.cur += 1
         elif code != 0 and not skipped_comment_stage:
-            self._completed_tasks += 1
             job.status = "failed"
             job.cur = len(job.commands)
         self._update_job_row(job)
-        self._lbl_status.setText(f"任务: {self._completed_tasks}/{self._total_tasks}")
         if job.cur >= len(job.commands):
             if job.status != "failed":
                 job.status = "done" if job.done == len(job.commands) else "failed"
@@ -1385,12 +1486,8 @@ class MainWindow(QMainWindow):
         ok = sum(1 for j in self._jobs if j.status == "done")
         failed = sum(1 for j in self._jobs if j.status == "failed")
         if failed:
-            self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接，失败 {failed}")
-            self._lbl_sstate.setText("状态: 有失败任务")
             summary = f"━━ 全部结束: {ok}/{len(self._jobs)} 个链接成功，失败 {failed} 个 ━━"
         else:
-            self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
-            self._lbl_sstate.setText("状态: 完成")
             summary = f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接成功 ━━"
         self._app_log.append(summary)
         self._show_detail(self._selected_job())
@@ -1539,7 +1636,6 @@ class MainWindow(QMainWindow):
                 if j.qrow is not None:
                     j.qrow.set_status("stopped")
         self._update_ui_running(False)
-        self._lbl_sstate.setText("状态: 已停止")
         self._refresh_active_count()
         job = self._selected_job()
         if job is not None:
@@ -1547,7 +1643,26 @@ class MainWindow(QMainWindow):
         self._app_log.append("■ 下载已停止")
         self._append_log("■ 下载已停止")
 
+    def _set_badge_breathing(self, on: bool):
+        if not hasattr(self, "_badge_fx"):
+            self._badge_fx = QGraphicsOpacityEffect(self._lbl_badge)
+            self._lbl_badge.setGraphicsEffect(self._badge_fx)
+            self._badge_anim = QVariantAnimation(self)
+            self._badge_anim.setDuration(1600)
+            self._badge_anim.setStartValue(1.0)
+            self._badge_anim.setEndValue(0.55)
+            self._badge_anim.setEasingCurve(QEasingCurve.InOutSine)
+            self._badge_anim.setLoopCount(-1)
+            self._badge_anim.valueChanged.connect(self._badge_fx.setOpacity)
+        self._badge_anim.stop()
+        if on:
+            self._badge_anim.start()
+        else:
+            self._badge_fx.setOpacity(1.0)
+
     def _update_ui_running(self, running: bool):
+        if not running:
+            self._set_badge_breathing(False)
         self._btn_start.setText("下载中…" if running else "开始下载")
         self._btn_start.setEnabled(not running)
         self._btn_stop.setEnabled(running)
@@ -1579,13 +1694,6 @@ class MainWindow(QMainWindow):
                 self._log_output("✓ 已登录，就绪")
         except Exception as e:
             self._log_output(f"⚠ 登录检测失败: {e}")
-
-    def _update_status_bar(self):
-        if self._tdl_path:
-            self._lbl_tdlpath.setText(f"tdl: {self._tdl_path}")
-            QTimer.singleShot(60, self._load_tdl_version)
-        else:
-            self._lbl_tdlpath.setText("tdl: 未找到")
 
     def _load_tdl_version(self):
         if not self._tdl_path:
