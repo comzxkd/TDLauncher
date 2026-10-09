@@ -33,3 +33,4 @@ release/
 *.bak
 preview_ui.py
 preview/
+tools/preview/
