@@ -1130,6 +1130,13 @@ class MainWindow(QMainWindow):
         job.log.append(clean)
         if job is self._selected_job():
             self._append_log(clean)
+        if "done!" in low:
+            key = self._desc_key(clean)
+            if key in job.files:
+                job.files[key] = 100
+                if job is self._selected_job():
+                    self._ensure_detail_file(key, 100)
+                    self._sync_filecount(job)
         if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
             if not self._btn_log.isChecked():
                 self._btn_log.setChecked(True)
@@ -1148,15 +1155,20 @@ class MainWindow(QMainWindow):
             job.eta = m.group(1)
         self._job_feed_file(job, clean)
 
+    @staticmethod
+    def _desc_key(text):
+        key = re.split(r"\s*(?:->|→)\s*", text.strip())[0].strip()
+        if key.isdigit():
+            key = "#" + key
+        if len(key) > 46:
+            key = key[:44] + "…"
+        return key
+
     def _job_feed_file(self, job, clean):
         m = re.match(r"^(?P<name>.+?)\s+(?P<pct>\d+(?:\.\d+)?)%\s*\[", clean)
         if not m:
             return
-        name = m.group("name").strip().split(" -> ")[0].strip()
-        if name.isdigit():
-            name = "#" + name
-        if len(name) > 46:
-            name = name[:44] + "…"
+        name = self._desc_key(m.group("name"))
         pct = int(float(m.group("pct")))
         if name not in job.files and len(job.files) >= 200:
             return
