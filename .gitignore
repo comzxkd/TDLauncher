@@ -31,6 +31,5 @@ release/
 
 # Local backups / dev previews
 *.bak
-preview_ui.py
 preview/
 tools/preview/
