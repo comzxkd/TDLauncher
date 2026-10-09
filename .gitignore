@@ -28,3 +28,8 @@ resources/*.png
 
 # Release packaging
 release/
+
+# Local backups / dev previews
+*.bak
+preview_ui.py
+preview/
