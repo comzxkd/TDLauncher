@@ -196,10 +196,13 @@ class CellsBar(QWidget):
 class QueueRow(QFrame):
     """队列里的一行：标记 + 名称 + 百分比 + 迷你进度条。"""
 
-    def __init__(self, name: str, parent=None):
+    def __init__(self, name: str, index: int = -1, on_click=None, parent=None):
         super().__init__(parent)
         self.setObjectName("QRow")
         self.setProperty("active", "false")
+        self.setCursor(Qt.PointingHandCursor)
+        self._index = index
+        self._on_click = on_click
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 6, 8, 7)
         v.setSpacing(5)
@@ -223,21 +226,44 @@ class QueueRow(QFrame):
         self.bar.setRange(0, 100)
         v.addWidget(self.bar)
 
+    def mousePressEvent(self, event):
+        if self._on_click is not None:
+            self._on_click(self._index)
+        super().mousePressEvent(event)
+
     def set_active(self, on: bool) -> None:
         self.setProperty("active", "true" if on else "false")
         self.style().unpolish(self)
         self.style().polish(self)
-        if on:
-            self.marker.setText("▸")
-        elif self.marker.text() != "✓":
-            self.marker.setText("◦")
 
-    def set_done(self) -> None:
-        self.marker.setText("✓")
+    def set_status(self, status: str) -> None:
+        self.marker.setText({"running": "▸", "done": "✓", "failed": "✗", "stopped": "■"}.get(status, "◦"))
 
     def set_pct(self, v: int) -> None:
         self.bar.setValue(v)
         self.pct.setText(f"{v}%")
+
+
+class Job:
+    """一个链接的下载任务（含其若干命令，顺序执行）。"""
+
+    def __init__(self, name: str, url: str, commands: list, labels: list):
+        self.name = name
+        self.url = url
+        self.commands = commands
+        self.labels = labels
+        self.status = "queued"      # queued | running | done | failed | stopped
+        self.cur = 0
+        self.done = 0
+        self.pct = 0
+        self.speed = "—"
+        self.eta = "—"
+        self.channel = ""
+        self.log: list = []
+        self.files: dict = {}       # 文件名 -> 百分比
+        self.parser = ProgressParser()
+        self.runner = None
+        self.qrow = None
 
 
 class FileRow(QFrame):
@@ -281,24 +307,19 @@ class MainWindow(QMainWindow):
 
         self._config = Config.load()
         self._tdl_path = _find_tdl()
-        self._runner: Optional[TdlRunner] = None
-        self._progress_parser = ProgressParser()
 
-        self._current_task_index = 0
-        self._task_commands: list = []
-        self._task_labels: list = []
-        self._task_link: list = []          # 每个命令对应的链接序号
-        self._link_names: list = []         # 每个链接的显示名
-        self._link_total: list = []         # 每个链接的命令总数
-        self._link_done: list = []          # 每个链接已完成命令数
+        self._jobs: list = []
+        self._max_parallel = 1
+        self._sel = 0
         self._queue_rows: list = []
-        self._file_rows: dict = {}
+        self._detail_files: dict = {}
+        self._detail_file_rows: list = []
         self._total_tasks = 0
         self._completed_tasks = 0
-        self._channel_display_name: str = ""
         self._chat_info_cache: dict = {}
         self._tip = TipLabel()
         self._tip_texts: dict = {}
+        self._app_log: list = []
 
         # 固定画布 + 等比缩放
         self._design = QWidget()
@@ -686,13 +707,6 @@ class MainWindow(QMainWindow):
         sbl.addWidget(self._lbl_sstate)
         root.addWidget(sb)
 
-        # 隐藏的聚合进度条（供既有逻辑使用）
-        self._bar_current = QProgressBar()
-        self._bar_current.setMaximum(100)
-        self._bar_total = QProgressBar()
-        self._bar_current.valueChanged.connect(self._sync_progress)
-        self._bar_total.valueChanged.connect(self._sync_progress)
-
     def _mkmeta(self, label, val_widget):
         w = QWidget()
         h = QHBoxLayout(w)
@@ -707,17 +721,6 @@ class MainWindow(QMainWindow):
     def _toggle_log(self, on: bool):
         self._txt_output.setVisible(on)
         self._btn_log.setText("tdl 输出 ▾" if on else "tdl 输出 ▸")
-
-    def _sync_progress(self):
-        v = self._bar_current.value()
-        self._lbl_bigpct.setText(str(v))
-        self._cells.setValue(v)
-        self._sync_filecount()
-
-    def _sync_filecount(self):
-        total = len(self._file_rows)
-        done = sum(1 for r in self._file_rows.values() if r.bar.value() >= 100)
-        self._lbl_totalcount.setText(f"{done}/{total}")
 
     # ---- 事件 ----
 
@@ -855,7 +858,7 @@ class MainWindow(QMainWindow):
         return fallback
 
     def closeEvent(self, event):
-        if self._runner and self._runner.is_running:
+        if any(j.status == "running" for j in self._jobs):
             ret = QMessageBox.question(
                 self, "TDLauncher",
                 "当前有下载任务正在运行，关闭窗口会停止下载。确定关闭吗？",
@@ -868,48 +871,75 @@ class MainWindow(QMainWindow):
         self._save_config()
         super().closeEvent(event)
 
-    # ---- 队列 / 文件列表 ----
+    # ---- 队列 / 详情 ----
 
     def _clear_layout(self, box, store):
         for w in list(store):
             w.setParent(None)
         store.clear()
 
-    def _add_queue_row(self, name: str) -> QueueRow:
-        row = QueueRow(name)
+    def _add_queue_row(self, name: str, index: int) -> QueueRow:
+        row = QueueRow(name, index, self._select_job)
         self._insert(self._queue_box, row)
         self._queue_rows.append(row)
         return row
 
-    def _add_file_row(self, name: str) -> FileRow:
-        row = FileRow(name)
-        self._insert(self._files_box, row)
-        self._file_rows[name] = row
-        return row
-
-    def _set_queue_active(self, idx: int):
-        for i, r in enumerate(self._queue_rows):
-            r.set_active(i == idx)
-
-    def _feed_files(self, text: str):
-        s = ANSI.sub("", text).strip()
-        m = re.match(r"^(?P<name>.+?)\s+(?P<pct>\d+(?:\.\d+)?)%\s*\[", s)
-        if not m:
-            return
-        name = m.group("name").strip().split(" -> ")[0].strip()
-        if len(name) > 46:
-            name = name[:44] + "…"
-        pct = int(float(m.group("pct")))
-        key = name
-        row = self._file_rows.get(key)
+    def _ensure_detail_file(self, name: str, pct: int):
+        row = self._detail_files.get(name)
         if row is None:
-            if len(self._file_rows) >= 80:
-                return
-            row = self._add_file_row(key)
+            row = FileRow(name)
+            self._insert(self._files_box, row)
+            self._detail_files[name] = row
+            self._detail_file_rows.append(row)
         row.set_pct(pct)
-        self._sync_filecount()
 
-    # ---- 下载控制 ----
+    def _selected_job(self):
+        if 0 <= self._sel < len(self._jobs):
+            return self._jobs[self._sel]
+        return None
+
+    def _select_job(self, idx: int):
+        self._sel = idx
+        for i, j in enumerate(self._jobs):
+            if j.qrow is not None:
+                j.qrow.set_active(i == idx)
+        self._show_detail(self._selected_job())
+
+    def _show_detail(self, job):
+        self._clear_layout(self._files_box, self._detail_file_rows)
+        self._detail_files = {}
+        if job is None:
+            return
+        self._lbl_current.setText(job.channel or job.name)
+        self._lbl_url.setText(job.url)
+        self._lbl_badge.setText({"running": "下载中", "done": "已完成", "failed": "失败",
+                                 "queued": "排队", "stopped": "已停止"}.get(job.status, job.status))
+        self._lbl_bigpct.setText(str(job.pct))
+        self._cells.setValue(job.pct)
+        self._lbl_speed.setText(job.speed or "—")
+        self._lbl_eta.setText(job.eta or "—")
+        for name, pct in job.files.items():
+            self._ensure_detail_file(name, pct)
+        self._sync_filecount(job)
+        self._txt_output.setPlainText("\n".join(self._app_log + job.log))
+
+    def _refresh_detail_progress(self, job):
+        self._lbl_bigpct.setText(str(job.pct))
+        self._cells.setValue(job.pct)
+        self._lbl_speed.setText(job.speed or "—")
+        self._lbl_eta.setText(job.eta or "—")
+
+    def _sync_filecount(self, job):
+        total = len(job.files)
+        done = sum(1 for v in job.files.values() if v >= 100)
+        self._lbl_totalcount.setText(f"{done}/{total}")
+
+    def _append_log(self, text: str):
+        self._txt_output.append(text)
+        sb = self._txt_output.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    # ---- 下载控制（多链接并行）----
 
     def _start_download(self):
         text = self._txt_links.toPlainText().strip()
@@ -917,8 +947,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "提示", "请先粘贴 Telegram 链接。")
             return
         lines = [l.strip() for l in text.split("\n") if l.strip()]
-        if not lines:
-            return
         dir_path = self._txt_dir.text().strip()
         if not os.path.isdir(dir_path):
             QMessageBox.warning(self, "错误", f"目录不存在: {dir_path}")
@@ -929,28 +957,22 @@ class MainWindow(QMainWindow):
 
         self._save_config()
 
-        self._task_commands = []
-        self._task_labels = []
-        self._task_link = []
-        self._link_names = []
-        self._link_total = []
-        self._link_done = []
+        self._jobs = []
         self._clear_layout(self._queue_box, self._queue_rows)
-        self._clear_layout(self._files_box, self._file_rows)
+        self._clear_layout(self._files_box, self._detail_file_rows)
+        self._detail_files = {}
+        self._total_tasks = 0
+        self._completed_tasks = 0
+        self._sel = 0
 
         for li, url in enumerate(lines):
             parsed = parse_telegram_link(url)
             include_comments = self._chk_comments.isChecked()
             auto_sub = self._chk_subfolder.isChecked()
-
             if parsed.channel:
                 disp = f"#{parsed.message_id} @{parsed.channel}" if parsed.message_id else f"@{parsed.channel}"
             else:
                 disp = f"#{parsed.message_id}" if parsed.message_id else url
-            self._link_names.append(disp)
-            row = self._add_queue_row(disp)
-            row.pct.setText("排队")
-
             job_config = self._config
             if auto_sub and parsed.message_id:
                 import copy
@@ -958,164 +980,188 @@ class MainWindow(QMainWindow):
                 folder_name = self._resolve_channel_name(parsed)
                 sub_dir = os.path.join(self._config.download_dir, folder_name, str(parsed.message_id))
                 job_config.download_dir = sub_dir
-
             cmds = build_download_commands(url, parsed, job_config, include_comments)
-            self._link_total.append(len(cmds))
-            self._link_done.append(0)
+            labels = []
             for cmd in cmds:
-                label = cmd[0]
-                if label == "dl" and "-f" in cmd:
-                    self._task_labels.append("下载评论区媒体")
-                elif label == "chat":
-                    self._task_labels.append("导出评论区列表")
+                if cmd[0] == "dl" and "-f" in cmd:
+                    labels.append("下载评论区媒体")
+                elif cmd[0] == "chat":
+                    labels.append("导出评论区列表")
                 else:
-                    self._task_labels.append("下载帖子媒体")
-                self._task_link.append(li)
-            self._task_commands.extend(cmds)
+                    labels.append("下载帖子媒体")
+            job = Job(disp, url, cmds, labels)
+            job.qrow = self._add_queue_row(disp, li)
+            job.qrow.pct.setText("排队")
+            self._jobs.append(job)
+            self._total_tasks += len(cmds)
 
-        if not self._task_commands:
+        if not self._jobs or self._total_tasks == 0:
             return
 
-        self._current_task_index = 0
-        self._total_tasks = len(self._task_commands)
-        self._completed_tasks = 0
-        self._channel_display_name = ""
-        self._progress_parser.reset()
-
-        self._bar_total.setMaximum(self._total_tasks)
-        self._bar_total.setValue(0)
-        self._bar_current.setValue(0)
-
+        self._max_parallel = max(1, self._spin_limit.value())
         self._update_ui_running(True)
         self._txt_output.clear()
         self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
-        self._lbl_qcount.setText(f"0/{len(self._link_names)} 活动")
+        self._lbl_qcount.setText(f"0/{len(self._jobs)} 活动")
         self._lbl_sstate.setText("状态: 下载中")
-        self._lbl_badge.setText("下载中")
-        self._lbl_current.setText(self._link_names[0] if self._link_names else "准备中...")
-        self._lbl_url.setText(lines[0] if lines else "")
+        self._select_job(0)
+        self._pump()
 
-        self._launch_next_task()
+    def _pump(self):
+        active = sum(1 for j in self._jobs if j.status == "running")
+        queued = [j for j in self._jobs if j.status == "queued"]
+        while active < self._max_parallel and queued:
+            j = queued.pop(0)
+            self._start_job(j)
+            active += 1
+        if not any(j.status == "running" for j in self._jobs) and not any(j.status == "queued" for j in self._jobs):
+            self._finish_all()
 
-    def _launch_next_task(self):
-        if self._current_task_index >= self._total_tasks:
+    def _start_job(self, job):
+        job.status = "running"
+        job.cur = 0
+        job.parser.reset()
+        if job.qrow is not None:
+            job.qrow.set_status("running")
+        self._refresh_active_count()
+        self._run_job_cmd(job)
+
+    def _run_job_cmd(self, job):
+        if job.cur >= len(job.commands):
+            job.status = "done" if job.done == len(job.commands) else "failed"
+            self._on_job_done(job)
             return
-        args = self._task_commands[self._current_task_index]
-        label = self._task_labels[self._current_task_index] if self._current_task_index < len(self._task_labels) else ""
-        self._log_output(f"\n▶ [{self._current_task_index + 1}/{self._total_tasks}] {label}")
-        self._progress_parser.reset()
-        self._bar_current.setValue(0)
+        args = job.commands[job.cur]
+        job.runner = TdlRunner(self._tdl_path)
+        job.runner.on_stdout = lambda t, j=job: self._on_job_output(j, t)
+        job.runner.on_stderr = lambda t, j=job: self._on_job_output(j, t)
+        job.runner.on_exit = lambda c, j=job: self._on_job_cmd_exit(j, c)
+        job.runner.start(args)
 
-        if self._current_task_index < len(self._task_link):
-            li = self._task_link[self._current_task_index]
-            self._set_queue_active(li)
-            if li < len(self._link_names) and self._channel_display_name == "":
-                self._lbl_current.setText(self._link_names[li])
+    def _on_job_cmd_exit(self, job, code):
+        job.runner = None
+        if code == 0:
+            job.done += 1
+            self._completed_tasks += 1
+            job.pct = 100
+        job.cur += 1
+        self._update_job_row(job)
+        self._lbl_status.setText(f"任务: {self._completed_tasks}/{self._total_tasks}")
+        if job.cur >= len(job.commands):
+            job.status = "done" if job.done == len(job.commands) else "failed"
+            self._on_job_done(job)
+        else:
+            job.parser.reset()
+            self._run_job_cmd(job)
 
-        self._runner = TdlRunner(self._tdl_path)
-        self._runner.on_stdout = self._on_tdl_output
-        self._runner.on_stderr = self._on_tdl_output
-        self._runner.on_exit = self._on_tdl_exit
-        self._runner.start(args)
+    def _on_job_done(self, job):
+        self._update_job_row(job)
+        self._refresh_active_count()
+        if job is self._selected_job():
+            self._show_detail(job)
+        self._pump()
 
-    def _on_tdl_output(self, text: str):
-        # tdl 用 \r 原地刷新进度，按 \r 拆帧后逐个分流
+    def _update_job_row(self, job):
+        if job.qrow is None:
+            return
+        if job.status == "done":
+            job.qrow.set_pct(100)
+            job.qrow.set_status("done")
+        elif job.status == "failed":
+            job.qrow.set_status("failed")
+        else:
+            job.qrow.set_pct(job.pct)
+            job.qrow.set_status(job.status)
+
+    def _refresh_active_count(self):
+        active = sum(1 for j in self._jobs if j.status == "running")
+        self._lbl_qcount.setText(f"{active}/{len(self._jobs)} 活动")
+
+    def _finish_all(self):
+        self._update_ui_running(False)
+        ok = sum(1 for j in self._jobs if j.status == "done")
+        self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
+        self._lbl_sstate.setText("状态: 完成")
+        self._app_log.append(f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接成功 ━━")
+        self._show_detail(self._selected_job())
+
+    def _on_job_output(self, job, text):
         for frame in text.split("\r"):
             frame = frame.strip()
             if frame:
-                self._process_frame(frame)
+                self._process_job_frame(job, frame)
 
     @staticmethod
     def _is_progress(s: str) -> bool:
         return bool(re.search(r"\d+(?:\.\d+)?%\s*\[", s) or re.match(r"^\[[\s.#]+\]", s))
 
-    def _process_frame(self, clean: str):
-        clean = ANSI.sub("", clean).strip()
+    def _process_job_frame(self, job, frame):
+        clean = ANSI.sub("", frame).strip()
         if not clean:
             return
         low = clean.lower()
-        # 1) 逐文件进度帧 → 只更新 UI，不写日志
         if self._is_progress(clean):
-            self._progress_parser.feed(clean)
-            self._feed_files(clean)
-            if self._progress_parser.percent is not None:
-                pct = int(self._progress_parser.percent)
-                self._bar_current.setValue(min(100, max(0, pct)))
-            self._lbl_speed.setText(self._progress_parser.speed or "—")
+            job.parser.feed(clean)
+            if job.parser.percent is not None:
+                job.pct = min(100, max(0, int(job.parser.percent)))
+            if job.parser.speed:
+                job.speed = job.parser.speed
             m = re.search(r"ETA[:：]?\s*([0-9][0-9hmsHMS.]*)", clean)
             if m:
-                self._lbl_eta.setText(m.group(1))
-            if not self._channel_display_name:
+                job.eta = m.group(1)
+            self._job_feed_file(job, clean)
+            if not job.channel:
                 mm = re.match(r"^(.+?)\(\d+\):\d+", clean.lstrip())
                 if mm:
-                    self._channel_display_name = mm.group(1).strip()
-                    self._lbl_current.setText(self._channel_display_name)
+                    job.channel = mm.group(1).strip()
+                    if job is self._selected_job():
+                        self._lbl_current.setText(job.channel)
+            if job.qrow is not None and job.status == "running":
+                job.qrow.set_pct(job.pct)
+            if job is self._selected_job():
+                self._refresh_detail_progress(job)
             return
-        # 2) CPU 资源状态 → 丢弃（噪音）
         if clean.lstrip().startswith("CPU:"):
             return
-        # 3) 其余是真正的消息（错误/状态/摘要）→ 写日志
-        self._log_output(clean)
+        job.log.append(clean)
+        if job is self._selected_job():
+            self._append_log(clean)
         if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
             if not self._btn_log.isChecked():
                 self._btn_log.setChecked(True)
 
-    def _on_tdl_exit(self, code: int):
-        current = self._current_task_index + 1
-        li = self._task_link[self._current_task_index] if self._current_task_index < len(self._task_link) else 0
-
-        if code == 0:
-            self._log_output("  ✓ 下载完成")
-            self._completed_tasks += 1
-            self._bar_current.setValue(100)
-            if li < len(self._link_done):
-                self._link_done[li] += 1
-                done = self._link_done[li]
-                tot = self._link_total[li] if li < len(self._link_total) else 1
-                pct = int(round(done / tot * 100)) if tot else 100
-                if li < len(self._queue_rows):
-                    self._queue_rows[li].set_pct(pct)
-                    if pct >= 100:
-                        self._queue_rows[li].set_done()
-        else:
-            self._log_output(f"  ✗ 下载失败 (退出码: {code})")
-            self._bar_current.setValue(0)
-
-        self._bar_total.setValue(self._completed_tasks)
-        active = sum(1 for i, d in enumerate(self._link_done) if 0 < d < self._link_total[i]) if self._link_done else 0
-        self._lbl_qcount.setText(f"{active}/{len(self._link_names)} 活动")
-        self._lbl_status.setText(f"任务: {current}/{self._total_tasks}")
-        self._runner = None
-
-        self._current_task_index += 1
-        if self._current_task_index < self._total_tasks:
-            self._launch_next_task()
-        else:
-            self._finish_download()
-
-    def _finish_download(self):
-        self._update_ui_running(False)
-        self._bar_current.setValue(100 if self._completed_tasks > 0 else 0)
-        self._bar_total.setValue(self._completed_tasks)
-        self._lbl_status.setText(f"完成: {self._completed_tasks}/{self._total_tasks}")
-        self._lbl_sstate.setText("状态: 完成")
-        self._lbl_badge.setText("已完成")
-        for r in self._queue_rows:
-            if r.bar.value() >= 100:
-                r.set_done()
-        self._log_output(f"\n━━ 全部完成: 成功 {self._completed_tasks} 个任务 ━━")
+    def _job_feed_file(self, job, clean):
+        m = re.match(r"^(?P<name>.+?)\s+(?P<pct>\d+(?:\.\d+)?)%\s*\[", clean)
+        if not m:
+            return
+        name = m.group("name").strip().split(" -> ")[0].strip()
+        if len(name) > 46:
+            name = name[:44] + "…"
+        pct = int(float(m.group("pct")))
+        if name not in job.files and len(job.files) >= 200:
+            return
+        job.files[name] = pct
+        if job is self._selected_job():
+            self._ensure_detail_file(name, pct)
+            self._sync_filecount(job)
 
     def _stop_download(self):
-        if self._runner:
-            self._runner.stop()
-            self._runner = None
+        for j in self._jobs:
+            if j.runner is not None:
+                j.runner.stop()
+                j.runner = None
+            if j.status in ("queued", "running"):
+                j.status = "stopped"
+                if j.qrow is not None:
+                    j.qrow.set_status("stopped")
         self._update_ui_running(False)
-        self._bar_current.setValue(0)
-        self._lbl_current.setText("已停止")
-        self._lbl_status.setText("已停止")
         self._lbl_sstate.setText("状态: 已停止")
-        self._lbl_badge.setText("已停止")
-        self._log_output("\n■ 下载已停止")
+        self._refresh_active_count()
+        job = self._selected_job()
+        if job is not None:
+            self._show_detail(job)
+        self._app_log.append("■ 下载已停止")
+        self._append_log("■ 下载已停止")
 
     def _update_ui_running(self, running: bool):
         self._btn_start.setText("下载中…" if running else "开始下载")
@@ -1130,9 +1176,8 @@ class MainWindow(QMainWindow):
         self._txt_proxy.setEnabled(not running and self._chk_proxy.isChecked())
 
     def _log_output(self, text: str):
-        self._txt_output.append(text)
-        sb = self._txt_output.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        self._app_log.append(text)
+        self._append_log(text)
 
     def _check_login_status(self):
         try:
