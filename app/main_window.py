@@ -998,7 +998,10 @@ class MainWindow(QMainWindow):
         if not self._jobs or self._total_tasks == 0:
             return
 
-        self._max_parallel = max(1, self._spin_limit.value())
+        # tdl 的 session 是 bolt 数据库，有独占锁：二个进程同时开会报
+        # "Current database is used by another process"。因此这里必须串行执行。
+        # （若需真正的并发，只能用单进程 + 多个 -u + -l N，见说明。）
+        self._max_parallel = 1
         self._update_ui_running(True)
         self._txt_output.clear()
         self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
