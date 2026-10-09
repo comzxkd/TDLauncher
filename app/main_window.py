@@ -322,6 +322,7 @@ class MainWindow(QMainWindow):
         self._tip_texts: dict = {}
         self._app_log: list = []
         self._by_msgid: dict = {}
+        self._batch = False
 
         # 固定画布 + 等比缩放
         self._design = QWidget()
@@ -556,14 +557,17 @@ class MainWindow(QMainWindow):
 
         toggles = QHBoxLayout()
         toggles.setSpacing(6)
-        self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件")
+        self._chk_batch = self._toggle(
+            "并发模式", checked=True,
+            tip="并发模式：单进程 + 多链接并发（快，逐链接进度为估算）\n逐条模式：一条一条顺序下载（进度精确，支持评论区/频道名归档）")
+        self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件（需逐条模式）")
         self._chk_subfolder = self._toggle("自动归档", tip="按频道显示名 + 消息 ID 自动归档")
         self._chk_skip_same = self._toggle("跳过同名")
         self._chk_resume = self._toggle("断点续传")
         self._chk_takeout = self._toggle("Takeout", tip="使用 Takeout 会话下载，可降低限流惩罚")
         self._chk_group = self._toggle("探测分组")
         self._chk_proxy = self._toggle("代理")
-        for w in (self._chk_comments, self._chk_subfolder, self._chk_skip_same,
+        for w in (self._chk_batch, self._chk_comments, self._chk_subfolder, self._chk_skip_same,
                   self._chk_resume, self._chk_takeout, self._chk_group, self._chk_proxy):
             toggles.addWidget(w)
         toggles.addStretch(1)
@@ -1006,13 +1010,18 @@ class MainWindow(QMainWindow):
         self._lbl_sstate.setText("状态: 下载中")
         self._select_job(0)
 
-        # 评论区下载需要逐链接 export，不能用单进程批量；否则用 tdl 内建并发
-        if self._chk_comments.isChecked():
+        # 并发模式：单进程 + 多 -u + -l N（tdl 内建并发）；否则逐条串行
+        use_batch = self._chk_batch.isChecked() and not self._chk_comments.isChecked()
+        self._batch = use_batch
+        if use_batch:
+            self._start_batch(lines)
+        else:
+            if self._chk_batch.isChecked() and self._chk_comments.isChecked():
+                self._app_log.append("⚠ 评论区下载需逐条串行，已自动切换到逐条模式")
+                self._append_log("⚠ 评论区下载需逐条串行，已自动切换到逐条模式")
             self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
             self._max_parallel = 1   # tdl session 独占锁，进程必须串行
             self._pump()
-        else:
-            self._start_batch(lines)
 
     def _start_batch(self, lines):
         """单进程 + 多个 -u + -l N，使用 tdl 内建并发。"""
@@ -1078,8 +1087,7 @@ class MainWindow(QMainWindow):
             job = self._by_msgid.get(int(m.group(2))) if m else None
             if job is not None:
                 self._apply_progress_frame(job, clean)
-                if job.qrow is not None:
-                    job.qrow.set_pct(job.pct)
+                self._set_row_pct(job)
                 if job is self._selected_job():
                     self._refresh_detail_progress(job)
             return
@@ -1161,6 +1169,15 @@ class MainWindow(QMainWindow):
             self._show_detail(job)
         self._pump()
 
+    def _set_row_pct(self, job):
+        if job.qrow is None:
+            return
+        if self._batch and job.pct >= 99:
+            job.qrow.bar.setValue(job.pct)
+            job.qrow.pct.setText("即将完成")
+        else:
+            job.qrow.set_pct(job.pct)
+
     def _update_job_row(self, job):
         if job.qrow is None:
             return
@@ -1170,7 +1187,7 @@ class MainWindow(QMainWindow):
         elif job.status == "failed":
             job.qrow.set_status("failed")
         else:
-            job.qrow.set_pct(job.pct)
+            self._set_row_pct(job)
             job.qrow.set_status(job.status)
 
     def _refresh_active_count(self):
@@ -1209,7 +1226,7 @@ class MainWindow(QMainWindow):
                     if job is self._selected_job():
                         self._lbl_current.setText(job.channel)
             if job.qrow is not None and job.status == "running":
-                job.qrow.set_pct(job.pct)
+                self._set_row_pct(job)
             if job is self._selected_job():
                 self._refresh_detail_progress(job)
             return
