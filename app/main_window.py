@@ -321,8 +321,6 @@ class MainWindow(QMainWindow):
         self._tip = TipLabel()
         self._tip_texts: dict = {}
         self._app_log: list = []
-        self._by_msgid: dict = {}
-        self._batch = False
 
         # 固定画布 + 等比缩放
         self._design = QWidget()
@@ -557,17 +555,14 @@ class MainWindow(QMainWindow):
 
         toggles = QHBoxLayout()
         toggles.setSpacing(6)
-        self._chk_batch = self._toggle(
-            "并发模式", checked=False,
-            tip="并发模式：单进程 + 多链接并发（快，逐链接进度为估算）\n逐条模式：一条一条顺序下载（进度精确，支持评论区/频道名归档）\n默认：逐条模式")
-        self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件（需逐条模式）")
+        self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件")
         self._chk_subfolder = self._toggle("自动归档", tip="按频道显示名 + 消息 ID 自动归档")
         self._chk_skip_same = self._toggle("跳过同名")
         self._chk_resume = self._toggle("断点续传")
         self._chk_takeout = self._toggle("Takeout", tip="使用 Takeout 会话下载，可降低限流惩罚")
         self._chk_group = self._toggle("探测分组")
         self._chk_proxy = self._toggle("代理")
-        for w in (self._chk_batch, self._chk_comments, self._chk_subfolder, self._chk_skip_same,
+        for w in (self._chk_comments, self._chk_subfolder, self._chk_skip_same,
                   self._chk_resume, self._chk_takeout, self._chk_group, self._chk_proxy):
             toggles.addWidget(w)
         toggles.addStretch(1)
@@ -1010,110 +1005,10 @@ class MainWindow(QMainWindow):
         self._lbl_sstate.setText("状态: 下载中")
         self._select_job(0)
 
-        # 并发模式：单进程 + 多 -u + -l N（tdl 内建并发）；否则逐条串行
-        use_batch = self._chk_batch.isChecked() and not self._chk_comments.isChecked()
-        self._batch = use_batch
-        if use_batch:
-            self._start_batch(lines)
-        else:
-            if self._chk_batch.isChecked() and self._chk_comments.isChecked():
-                self._app_log.append("⚠ 评论区下载需逐条串行，已自动切换到逐条模式")
-                self._append_log("⚠ 评论区下载需逐条串行，已自动切换到逐条模式")
-            self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
-            self._max_parallel = 1   # tdl session 独占锁，进程必须串行
-            self._pump()
-
-    def _start_batch(self, lines):
-        """单进程 + 多个 -u + -l N，使用 tdl 内建并发。"""
-        conf = self._config
-        args = ["dl"]
-        for u in lines:
-            args += ["-u", u]
-        args += ["-d", conf.download_dir]
-        if conf.proxy_enabled and conf.proxy:
-            args += ["--proxy", conf.proxy]
-        args += ["-t", str(conf.threads)]
-        args += ["-l", str(max(1, conf.limit))]
-        tpl = conf.filename_template or "{{ filenamify .FileName }}"
-        if self._chk_subfolder.isChecked():
-            tpl = "{{ .DialogID }}/{{ .MessageID }}/" + tpl
-        args += ["--template", tpl]
-        ext_map = {"images": "jpg,png,gif,webp,jpeg",
-                   "videos": "mp4,mkv,mov,avi,webm,flv",
-                   "audio": "mp3,ogg,wav,flac,aac,m4a,wma"}
-        if conf.content_type in ext_map:
-            args += ["-i", ext_map[conf.content_type]]
-        elif conf.content_type == "custom" and conf.custom_extensions:
-            args += ["-i", conf.custom_extensions]
-        if conf.skip_same:
-            args += ["--skip-same"]
-        if conf.resume:
-            args += ["--continue"]
-        if conf.takeout:
-            args += ["--takeout"]
-        if conf.group:
-            args += ["--group"]
-
-        self._by_msgid = {}
-        for j in self._jobs:
-            j.status = "running"
-            if j.msgid:
-                self._by_msgid[j.msgid] = j
-            if j.qrow is not None:
-                j.qrow.set_status("running")
-                j.qrow.pct.setText("…")
-        self._batch_args = args
-        self._lbl_status.setText(f"批量下载中 · {len(self._jobs)} 链接 · 并发 {conf.limit}")
-        self._refresh_active_count()
-        self._runner = TdlRunner(self._tdl_path)
-        self._runner.on_stdout = self._on_batch_output
-        self._runner.on_stderr = self._on_batch_output
-        self._runner.on_exit = self._on_batch_exit
-        self._runner.start(args)
-
-    def _on_batch_output(self, text):
-        for frame in text.split("\r"):
-            frame = frame.strip()
-            if frame:
-                self._process_batch_frame(frame)
-
-    def _process_batch_frame(self, frame):
-        clean = ANSI.sub("", frame).strip()
-        if not clean:
-            return
-        low = clean.lower()
-        if self._is_progress(clean):
-            m = re.search(r"\((\d+)\):(\d+)", clean)
-            job = self._by_msgid.get(int(m.group(2))) if m else None
-            if job is not None:
-                self._apply_progress_frame(job, clean)
-                self._set_row_pct(job)
-                if job is self._selected_job():
-                    self._refresh_detail_progress(job)
-            return
-        if clean.lstrip().startswith("CPU:"):
-            return
-        self._app_log.append(clean)
-        self._append_log(clean)
-        if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
-            if not self._btn_log.isChecked():
-                self._btn_log.setChecked(True)
-
-    def _on_batch_exit(self, code):
-        self._update_ui_running(False)
-        ok = 0
-        for j in self._jobs:
-            if j.status == "running":
-                j.status = "done" if code == 0 else "failed"
-                if code == 0:
-                    j.pct = 100
-                    ok += 1
-                self._update_job_row(j)
-        self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
-        self._lbl_sstate.setText("状态: 完成" if code == 0 else "状态: 失败")
-        self._app_log.append(f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接 ━━")
-        self._refresh_active_count()
-        self._show_detail(self._selected_job())
+        # tdl 的 session 是独占锁，多个进程不能同时开，因此逐条串行执行
+        self._lbl_status.setText(f"任务: 0/{self._total_tasks}")
+        self._max_parallel = 1
+        self._pump()
 
     def _pump(self):
         active = sum(1 for j in self._jobs if j.status == "running")
@@ -1170,12 +1065,7 @@ class MainWindow(QMainWindow):
         self._pump()
 
     def _set_row_pct(self, job):
-        if job.qrow is None:
-            return
-        if self._batch and job.pct >= 99:
-            job.qrow.bar.setValue(job.pct)
-            job.qrow.pct.setText("即将完成")
-        else:
+        if job.qrow is not None:
             job.qrow.set_pct(job.pct)
 
     def _update_job_row(self, job):
