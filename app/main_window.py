@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sys
@@ -257,11 +258,26 @@ class Job:
         self.cur = 0
         self.done = 0
         self.pct = 0
+        self.command_pct = 0.0
+        self.command_file_progress: dict = {}
+        self.command_output_mtime_ns: Optional[int] = None
+        self.command_log_start = 0
+        self.stage_progress = [0.0] * len(commands)
+        download_count = sum(1 for command in commands if command and command[0] == "dl")
+        self.download_stage_count = download_count
+        if download_count:
+            weight = 1.0 / download_count
+            self.stage_weights = [weight if command and command[0] == "dl" else 0.0
+                                  for command in commands]
+        else:
+            weight = 1.0 / max(1, len(commands))
+            self.stage_weights = [weight] * len(commands)
         self.speed = "—"
         self.eta = "—"
         self.channel = ""
         self.log: list = []
         self.files: dict = {}       # 文件名 -> 百分比
+        self.file_identities: dict = {}  # (peer ID, message ID) -> 文件行键集合
         self.parser = ProgressParser()
         self.runner = None
         self.qrow = None
@@ -1034,7 +1050,20 @@ class MainWindow(QMainWindow):
             job.status = "done" if job.done == len(job.commands) else "failed"
             self._on_job_done(job)
             return
+        job.parser.reset()
+        job.command_pct = 0.0
+        job.command_file_progress.clear()
+        job.command_output_mtime_ns = None
+        job.command_log_start = len(job.log)
+        job.speed = "—"
+        job.eta = "—"
         args = job.commands[job.cur]
+        if args[:2] == ["chat", "export"] and "-o" in args:
+            try:
+                output_path = args[args.index("-o") + 1]
+                job.command_output_mtime_ns = os.stat(output_path).st_mtime_ns
+            except (OSError, IndexError):
+                pass
         job.runner = TdlRunner(self._tdl_path)
         job.runner.on_stdout = lambda t, j=job: self._on_job_output(j, t)
         job.runner.on_stderr = lambda t, j=job: self._on_job_output(j, t)
@@ -1043,18 +1072,44 @@ class MainWindow(QMainWindow):
 
     def _on_job_cmd_exit(self, job, code):
         job.runner = None
-        if code == 0:
+        export_empty = code == 0 and self._export_has_no_messages(job)
+        no_comment_group = code != 0 and self._is_no_comment_group_error(job)
+        skip_index = None
+        if export_empty:
+            skip_index = self._empty_comment_download_index(job, job.cur)
+        elif no_comment_group:
+            skip_index = self._comment_download_index(job, job.cur)
+        skipped_comment_stage = export_empty or no_comment_group
+        if code == 0 or skipped_comment_stage:
             job.done += 1
             self._completed_tasks += 1
-            job.pct = 100
-            # 该命令下载的条目全部完成（tdl 不逐文件报完成，命令成功即视为全部完成）
-            for k in list(job.files):
-                job.files[k] = 100
+            if 0 <= job.cur < len(job.stage_progress):
+                job.stage_progress[job.cur] = 100.0
+            # 下载命令成功后，只将本命令观察到的文件标记为完成。
+            if code == 0 and 0 <= job.cur < len(job.commands) and job.commands[job.cur][0] == "dl":
+                for k in job.command_file_progress:
+                    job.files[k] = 100
+                    job.command_file_progress[k] = 100.0
+            self._update_job_progress(job)
         job.cur += 1
+        if skip_index == job.cur:
+            job.done += 1
+            self._completed_tasks += 1
+            job.stage_progress[job.cur] = 100.0
+            message = "评论区没有可下载媒体，已跳过下载" if export_empty else "帖子没有关联评论区，已跳过评论下载"
+            job.log.append(message)
+            if job is self._selected_job():
+                self._append_log(message)
+            job.cur += 1
+        elif code != 0 and not skipped_comment_stage:
+            self._completed_tasks += 1
+            job.status = "failed"
+            job.cur = len(job.commands)
         self._update_job_row(job)
         self._lbl_status.setText(f"任务: {self._completed_tasks}/{self._total_tasks}")
         if job.cur >= len(job.commands):
-            job.status = "done" if job.done == len(job.commands) else "failed"
+            if job.status != "failed":
+                job.status = "done" if job.done == len(job.commands) else "failed"
             self._on_job_done(job)
         else:
             job.parser.reset()
@@ -1062,7 +1117,93 @@ class MainWindow(QMainWindow):
                 self._show_detail(job)
             self._run_job_cmd(job)
 
+    @staticmethod
+    def _comment_download_index(job, export_index):
+        if not 0 <= export_index < len(job.commands):
+            return None
+        export_cmd = job.commands[export_index]
+        if export_cmd[:2] != ["chat", "export"]:
+            return None
+        download_index = export_index + 1
+        if download_index >= len(job.commands):
+            return None
+        download_cmd = job.commands[download_index]
+        if download_cmd[:1] != ["dl"] or "-f" not in download_cmd:
+            return None
+        try:
+            output_path = export_cmd[export_cmd.index("-o") + 1]
+            file_index = download_cmd.index("-f") + 1
+        except IndexError:
+            return None
+        if file_index >= len(download_cmd) or download_cmd[file_index] != output_path:
+            return None
+        return download_index
+
+    def _is_no_comment_group_error(self, job):
+        if not 0 <= job.cur < len(job.commands):
+            return False
+        command = job.commands[job.cur]
+        if command[:2] != ["chat", "export"]:
+            return False
+        text = "\n".join(job.log[job.command_log_start:]).lower()
+        patterns = (
+            "no linked group",
+            "message_id_invalid",
+            "msg_id_invalid",
+            "replies not found",
+            "reply message not found",
+            "message to reply not found",
+            "comments are not available",
+        )
+        return any(pattern in text for pattern in patterns)
+
+    def _export_has_no_messages(self, job):
+        if not 0 <= job.cur < len(job.commands):
+            return False
+        export_cmd = job.commands[job.cur]
+        if export_cmd[:2] != ["chat", "export"] or "-o" not in export_cmd:
+            return False
+        try:
+            output_path = export_cmd[export_cmd.index("-o") + 1]
+            stat = os.stat(output_path)
+            if job.command_output_mtime_ns is not None and stat.st_mtime_ns == job.command_output_mtime_ns:
+                return False
+            with open(output_path, "r", encoding="utf-8") as f:
+                exported = json.load(f)
+        except (OSError, ValueError, IndexError):
+            return False
+        return isinstance(exported, dict) and exported.get("messages") == []
+
+    @staticmethod
+    def _empty_comment_download_index(job, export_index):
+        if not 0 <= export_index < len(job.commands):
+            return None
+        export_cmd = job.commands[export_index]
+        if export_cmd[:2] != ["chat", "export"] or "-o" not in export_cmd:
+            return None
+        try:
+            output_path = export_cmd[export_cmd.index("-o") + 1]
+            with open(output_path, "r", encoding="utf-8") as f:
+                exported = json.load(f)
+        except (OSError, ValueError, IndexError):
+            return None
+        if not isinstance(exported, dict) or exported.get("messages") != []:
+            return None
+
+        download_index = export_index + 1
+        if download_index >= len(job.commands):
+            return None
+        download_cmd = job.commands[download_index]
+        if download_cmd[:1] != ["dl"] or "-f" not in download_cmd:
+            return None
+        file_index = download_cmd.index("-f") + 1
+        if file_index >= len(download_cmd) or download_cmd[file_index] != output_path:
+            return None
+        return download_index
+
     def _on_job_done(self, job):
+        if job.status == "done":
+            job.pct = 100
         self._update_job_row(job)
         self._refresh_active_count()
         if job is self._selected_job():
@@ -1092,9 +1233,16 @@ class MainWindow(QMainWindow):
     def _finish_all(self):
         self._update_ui_running(False)
         ok = sum(1 for j in self._jobs if j.status == "done")
-        self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
-        self._lbl_sstate.setText("状态: 完成")
-        self._app_log.append(f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接成功 ━━")
+        failed = sum(1 for j in self._jobs if j.status == "failed")
+        if failed:
+            self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接，失败 {failed}")
+            self._lbl_sstate.setText("状态: 有失败任务")
+            summary = f"━━ 全部结束: {ok}/{len(self._jobs)} 个链接成功，失败 {failed} 个 ━━"
+        else:
+            self._lbl_status.setText(f"完成: {ok}/{len(self._jobs)} 链接")
+            self._lbl_sstate.setText("状态: 完成")
+            summary = f"━━ 全部完成: {ok}/{len(self._jobs)} 个链接成功 ━━"
+        self._app_log.append(summary)
         self._show_detail(self._selected_job())
 
     def _on_job_output(self, job, text):
@@ -1114,6 +1262,8 @@ class MainWindow(QMainWindow):
         low = clean.lower()
         if self._is_progress(clean):
             self._apply_progress_frame(job, clean)
+            if "done!" in low:
+                self._mark_completed_file(job, clean)
             if not job.channel:
                 mm = re.match(r"^(.+?)\(\d+\):\d+", clean.lstrip())
                 if mm:
@@ -1131,20 +1281,48 @@ class MainWindow(QMainWindow):
         if job is self._selected_job():
             self._append_log(clean)
         if "done!" in low:
-            key = self._desc_key(clean)
-            if key in job.files:
-                job.files[key] = 100
-                if job is self._selected_job():
-                    self._ensure_detail_file(key, 100)
-                    self._sync_filecount(job)
+            self._mark_completed_file(job, clean)
         if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
             if not self._btn_log.isChecked():
                 self._btn_log.setChecked(True)
 
+    def _mark_completed_file(self, job, clean):
+        identity_match = re.search(r"\((?P<peer>\d+)\):(?P<message>\d+)", clean)
+        if identity_match:
+            identity = (identity_match.group("peer"), identity_match.group("message"))
+            keys = job.file_identities.get(identity, ())
+            if not keys:
+                descriptor = clean.split("->", 1)[0].strip()
+                descriptor = re.sub(r"\s*(?:done!|failed!)\s*$", "", descriptor, flags=re.IGNORECASE)
+                name = self._desc_key(descriptor)
+                job.files[name] = 100
+                job.command_file_progress[name] = 100.0
+                job.file_identities.setdefault(identity, set()).add(name)
+                keys = (name,)
+        else:
+            descriptor = clean.split("->", 1)[0].strip()
+            descriptor = re.sub(r"\s*(?:done!|failed!)\s*$", "", descriptor, flags=re.IGNORECASE)
+            key = self._desc_key(descriptor)
+            if key not in job.files:
+                return
+            job.files[key] = 100
+            job.command_file_progress[key] = 100.0
+            keys = (key,)
+        for key in keys:
+            job.files[key] = 100
+            if key in job.command_file_progress:
+                job.command_file_progress[key] = 100.0
+            if job is self._selected_job():
+                self._ensure_detail_file(key, 100)
+        if keys:
+            if job is self._selected_job():
+                self._sync_filecount(job)
+            self._update_job_progress(job)
+
     def _apply_progress_frame(self, job, clean):
         job.parser.feed(clean)
         if job.parser.percent is not None:
-            job.pct = min(100, max(0, int(job.parser.percent)))
+            job.command_pct = max(job.command_pct, job.parser.percent)
         spd = job.parser.speed
         if spd and ";" in spd:
             spd = spd.rsplit(";", 1)[-1].strip()
@@ -1154,6 +1332,7 @@ class MainWindow(QMainWindow):
         if m:
             job.eta = m.group(1)
         self._job_feed_file(job, clean)
+        self._update_job_progress(job)
 
     @staticmethod
     def _desc_key(text):
@@ -1172,10 +1351,33 @@ class MainWindow(QMainWindow):
         pct = int(float(m.group("pct")))
         if name not in job.files and len(job.files) >= 200:
             return
-        job.files[name] = pct
+        job.files[name] = max(job.files.get(name, 0), pct)
+        job.command_file_progress[name] = max(job.command_file_progress.get(name, 0.0), float(pct))
+        identity_match = re.search(r"\((?P<peer>\d+)\):(?P<message>\d+)", clean)
+        if identity_match:
+            identity = (identity_match.group("peer"), identity_match.group("message"))
+            job.file_identities.setdefault(identity, set()).add(name)
         if job is self._selected_job():
-            self._ensure_detail_file(name, pct)
+            self._ensure_detail_file(name, job.files[name])
             self._sync_filecount(job)
+
+    def _update_job_progress(self, job):
+        if job.status == "done":
+            job.pct = 100
+        elif 0 <= job.cur < len(job.stage_progress):
+            if job.commands[job.cur][0] == "dl":
+                if job.command_file_progress:
+                    current = sum(job.command_file_progress.values()) / len(job.command_file_progress)
+                else:
+                    current = job.command_pct
+                current = max(job.stage_progress[job.cur], min(99.0, current))
+                job.stage_progress[job.cur] = current
+            total_weight = sum(job.stage_weights)
+            total = sum(pct * weight for pct, weight in zip(job.stage_progress, job.stage_weights)) / total_weight
+            job.pct = min(99, max(job.pct, int(total)))
+        self._set_row_pct(job)
+        if job is self._selected_job():
+            self._refresh_detail_progress(job)
 
     def _stop_download(self):
         for j in self._jobs:
