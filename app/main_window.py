@@ -1052,8 +1052,10 @@ class MainWindow(QMainWindow):
                 self._by_msgid[j.msgid] = j
             if j.qrow is not None:
                 j.qrow.set_status("running")
+                j.qrow.pct.setText("…")
         self._batch_args = args
         self._lbl_status.setText(f"批量下载中 · {len(self._jobs)} 链接 · 并发 {conf.limit}")
+        self._refresh_active_count()
         self._runner = TdlRunner(self._tdl_path)
         self._runner.on_stdout = self._on_batch_output
         self._runner.on_stderr = self._on_batch_output
