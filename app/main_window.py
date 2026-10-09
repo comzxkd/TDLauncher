@@ -1047,6 +1047,9 @@ class MainWindow(QMainWindow):
             job.done += 1
             self._completed_tasks += 1
             job.pct = 100
+            # 该命令下载的条目全部完成（tdl 不逐文件报完成，命令成功即视为全部完成）
+            for k in list(job.files):
+                job.files[k] = 100
         job.cur += 1
         self._update_job_row(job)
         self._lbl_status.setText(f"任务: {self._completed_tasks}/{self._total_tasks}")
@@ -1055,6 +1058,8 @@ class MainWindow(QMainWindow):
             self._on_job_done(job)
         else:
             job.parser.reset()
+            if job is self._selected_job():
+                self._show_detail(job)
             self._run_job_cmd(job)
 
     def _on_job_done(self, job):
@@ -1148,6 +1153,8 @@ class MainWindow(QMainWindow):
         if not m:
             return
         name = m.group("name").strip().split(" -> ")[0].strip()
+        if name.isdigit():
+            name = "#" + name
         if len(name) > 46:
             name = name[:44] + "…"
         pct = int(float(m.group("pct")))
