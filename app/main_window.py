@@ -558,8 +558,8 @@ class MainWindow(QMainWindow):
         toggles = QHBoxLayout()
         toggles.setSpacing(6)
         self._chk_batch = self._toggle(
-            "并发模式", checked=True,
-            tip="并发模式：单进程 + 多链接并发（快，逐链接进度为估算）\n逐条模式：一条一条顺序下载（进度精确，支持评论区/频道名归档）")
+            "并发模式", checked=False,
+            tip="并发模式：单进程 + 多链接并发（快，逐链接进度为估算）\n逐条模式：一条一条顺序下载（进度精确，支持评论区/频道名归档）\n默认：逐条模式")
         self._chk_comments = self._toggle("评论区", tip="下载帖子后，自动导出并下载评论区中的媒体文件（需逐条模式）")
         self._chk_subfolder = self._toggle("自动归档", tip="按频道显示名 + 消息 ID 自动归档")
         self._chk_skip_same = self._toggle("跳过同名")
