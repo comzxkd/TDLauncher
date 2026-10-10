@@ -33,7 +33,7 @@ class StateParser:
         self._ansi_escape = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
         
         # 匹配完成行：ASMR基佬中心(1539428348):19281 ->~ ... done! [4.76 MB in 1.936s; 2.42 MB/s]
-        self._re_done = re.compile(r"^(.*?)\s*(?:->|→|->~).*?(?:done!|failed!).*?(?:\[(.*?)\])?", re.IGNORECASE)
+        self._re_done = re.compile(r"^(.*?)\s*(?:->|→|->~).*?(?:done!|failed!)(?:\s*\[(.*?)\])?", re.IGNORECASE)
         
         # 匹配进度行：ASMR基佬中心(1539428348):19281 -> ... 55% [===>  ] 2.4 MB/s ETA 3s
         # 注意 tdl 的格式可能不带 ->，直接是 名字 55%
