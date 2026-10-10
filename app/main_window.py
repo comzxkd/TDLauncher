@@ -1704,7 +1704,10 @@ class MainWindow(QMainWindow):
             descriptor = re.sub(r"\s*(?:done!|failed!)\s*$", "", descriptor, flags=re.IGNORECASE)
             key = self._desc_key(descriptor)
             if key not in job.files:
-                return
+                # 对于非 takeout 模式或没有产生中间进度帧就瞬间下完的小文件
+                # 只要文本符合下载特征，就不再过滤丢弃，直接接纳为新项
+                if "->" not in clean:
+                    return
             job.files[key] = 100
             job.command_file_progress[key] = 100.0
             keys = (key,)
