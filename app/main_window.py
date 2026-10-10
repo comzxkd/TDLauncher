@@ -21,6 +21,7 @@ from link_parser import parse_telegram_link, ParsedLink
 from command_builder import build_download_commands
 from tdl_runner import TdlRunner
 from progress_parser import ProgressParser
+from tdl_event_parser import StateParser, TdlEvent
 
 
 # 设计画布尺寸（16:9），窗口在此尺寸下为 1× 缩放
@@ -477,7 +478,6 @@ class Job:
         self.log: list = []
         self.files: dict = {}       # 文件名 -> 百分比
         self.file_identities: dict = {}  # (peer ID, message ID) -> 文件行键集合
-        self.parser = ProgressParser()
         self.runner = None
         self.qrow = None
 
@@ -591,6 +591,7 @@ class MainWindow(QMainWindow):
 
         self._config = Config.load()
         self._tdl_path = _find_tdl()
+        self._tdl_parser = StateParser()
 
         self._jobs: list = []
         self._max_parallel = 1
@@ -1651,90 +1652,99 @@ class MainWindow(QMainWindow):
             if frame:
                 self._process_job_frame(job, frame)
 
-    @staticmethod
-    def _is_progress(s: str) -> bool:
-        return bool(re.search(r"\d+(?:\.\d+)?%\s*\[", s) or re.match(r"^\[[\s.#]+\]", s))
-
     def _process_job_frame(self, job, frame):
         clean = ANSI.sub("", frame).strip()
         if not clean:
             return
-        low = clean.lower()
-        if self._is_progress(clean):
-            self._apply_progress_frame(job, clean)
-            if "done!" in low:
-                self._mark_completed_file(job, clean)
-            if not job.channel:
-                mm = re.match(r"^(.+?)\(\d+\):\d+", clean.lstrip())
-                if mm:
-                    job.channel = mm.group(1).strip()
-                    if job is self._selected_job():
-                        self._lbl_current.setText(job.channel)
+            
+        # [探针记录] 将最纯粹的输出原样写入本地日志，用于分析 tdl 行为
+        try:
+            import time, os
+            os.makedirs("logs", exist_ok=True)
+            with open("logs/tdl_raw_debug.log", "a", encoding="utf-8") as f:
+                ts = time.strftime("%H:%M:%S")
+                f.write(f"[{ts}] {clean}\n")
+        except Exception:
+            pass
+
+        # 将脏日志喂给状态机，换取结构化事件
+        ev = self._tdl_parser.feed(clean)
+        
+        if ev.type == "IGNORED":
+            return
+            
+        elif ev.type == "ERROR":
+            job.log.append(clean)
+            if job is self._selected_job():
+                self._append_log(clean)
+            if not self._btn_log.isChecked():
+                self._btn_log.setChecked(True)
+                
+        elif ev.type == "META":
+            job.log.append(clean)
+            if job is self._selected_job():
+                self._append_log(clean)
+            # 从 META 或其他信息中提取频道作为大标题
+            if not job.channel and ev.channel_name:
+                job.channel = ev.channel_name
+                if job is self._selected_job():
+                    self._lbl_current.setText(job.channel)
+                    
+        elif ev.type == "PROGRESS":
+            self._handle_event_progress(job, ev)
+            if not job.channel and ev.channel_name:
+                job.channel = ev.channel_name
+                if job is self._selected_job():
+                    self._lbl_current.setText(job.channel)
             if job.qrow is not None and job.status == "running":
                 self._set_row_pct(job)
             if job is self._selected_job():
                 self._refresh_detail_progress(job)
+                
+        elif ev.type == "DONE":
+            job.log.append(clean)
+            if job is self._selected_job():
+                self._append_log(clean)
+            self._handle_event_done(job, ev)
+
+    def _handle_event_progress(self, job, ev: TdlEvent):
+        name = ev.descriptor
+        if not name:
             return
-        if clean.lstrip().startswith("CPU:"):
+        if name not in job.files and len(job.files) >= 200:
             return
-        job.log.append(clean)
+            
+        job.files[name] = max(job.files.get(name, 0), int(ev.percent))
+        job.command_file_progress[name] = max(job.command_file_progress.get(name, 0.0), ev.percent)
+        
+        if ev.speed:
+            job.speed = ev.speed
+        if ev.eta:
+            job.eta = ev.eta
+            
+        job.command_pct = max(job.command_pct, ev.percent)
+        
         if job is self._selected_job():
-            self._append_log(clean)
-        if "done!" in low:
-            self._mark_completed_file(job, clean)
-        if any(k in low for k in ("error", "flood", "failed", "panic")) or "失败" in clean:
-            if not self._btn_log.isChecked():
-                self._btn_log.setChecked(True)
+            self._ensure_detail_file(name, job.files[name])
+            self._sync_filecount(job)
+            
+        self._update_job_progress(job)
 
-    def _mark_completed_file(self, job, clean):
-        identity_match = re.search(r"\((?P<peer>\d+)\):(?P<message>\d+)", clean)
-        if identity_match:
-            identity = (identity_match.group("peer"), identity_match.group("message"))
-            keys = job.file_identities.get(identity, ())
-            if not keys:
-                descriptor = clean.split("->", 1)[0].strip()
-                descriptor = re.sub(r"\s*(?:done!|failed!)\s*$", "", descriptor, flags=re.IGNORECASE)
-                name = self._desc_key(descriptor)
-                job.files[name] = 100
-                job.command_file_progress[name] = 100.0
-                job.file_identities.setdefault(identity, set()).add(name)
-                keys = (name,)
-        else:
-            descriptor = clean.split("->", 1)[0].strip()
-            descriptor = re.sub(r"\s*(?:done!|failed!)\s*$", "", descriptor, flags=re.IGNORECASE)
-            key = self._desc_key(descriptor)
-            if key not in job.files:
-                # 对于非 takeout 模式或没有产生中间进度帧就瞬间下完的小文件
-                # 只要文本符合下载特征，就不再过滤丢弃，直接接纳为新项
-                if "->" not in clean:
-                    return
-            job.files[key] = 100
-            job.command_file_progress[key] = 100.0
-            keys = (key,)
-        for key in keys:
-            job.files[key] = 100
-            if key in job.command_file_progress:
-                job.command_file_progress[key] = 100.0
-            if job is self._selected_job():
-                self._ensure_detail_file(key, 100)
-        if keys:
-            if job is self._selected_job():
-                self._sync_filecount(job)
-            self._update_job_progress(job)
-
-    def _apply_progress_frame(self, job, clean):
-        job.parser.feed(clean)
-        if job.parser.percent is not None:
-            job.command_pct = max(job.command_pct, job.parser.percent)
-        spd = job.parser.speed
-        if spd and ";" in spd:
-            spd = spd.rsplit(";", 1)[-1].strip()
-        if spd:
-            job.speed = spd
-        m = re.search(r"ETA[:：]?\s*([0-9][0-9hmsHMS.:]*)", clean)
-        if m:
-            job.eta = m.group(1)
-        self._job_feed_file(job, clean)
+    def _handle_event_done(self, job, ev: TdlEvent):
+        name = ev.descriptor
+        if not name:
+            return
+            
+        job.files[name] = 100
+        job.command_file_progress[name] = 100.0
+        
+        if ev.speed:
+            job.speed = ev.speed
+            
+        if job is self._selected_job():
+            self._ensure_detail_file(name, 100)
+            self._sync_filecount(job)
+            
         self._update_job_progress(job)
 
     @staticmethod
@@ -1745,24 +1755,6 @@ class MainWindow(QMainWindow):
         if len(key) > 46:
             key = key[:44] + "…"
         return key
-
-    def _job_feed_file(self, job, clean):
-        m = re.match(r"^(?P<name>.+?)\s+(?P<pct>\d+(?:\.\d+)?)%\s*\[", clean)
-        if not m:
-            return
-        name = self._desc_key(m.group("name"))
-        pct = int(float(m.group("pct")))
-        if name not in job.files and len(job.files) >= 200:
-            return
-        job.files[name] = max(job.files.get(name, 0), pct)
-        job.command_file_progress[name] = max(job.command_file_progress.get(name, 0.0), float(pct))
-        identity_match = re.search(r"\((?P<peer>\d+)\):(?P<message>\d+)", clean)
-        if identity_match:
-            identity = (identity_match.group("peer"), identity_match.group("message"))
-            job.file_identities.setdefault(identity, set()).add(name)
-        if job is self._selected_job():
-            self._ensure_detail_file(name, job.files[name])
-            self._sync_filecount(job)
 
     def _update_job_progress(self, job):
         if job.status == "done":
