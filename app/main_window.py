@@ -866,7 +866,7 @@ class MainWindow(QMainWindow):
         self._chk_subfolder = self._toggle("按帖归档", tip="将每条链接的媒体保存到“频道名称/消息 ID”独立目录。")
         self._chk_skip_same = self._toggle("跳过重复文件", tip="跳过下载目录中已存在且名称、大小相同的文件。")
         self._chk_resume = self._toggle("断点续传", tip="继续下载未完成的文件，避免从头重新传输。")
-        self._chk_takeout = self._toggle("Takeout 模式", tip="使用 Telegram Takeout 会话下载，适合批量获取媒体。")
+        self._chk_takeout = self._toggle("Takeout 模式", tip="防封神器：使用导出特权通道，适合下载频道几百上千的大批量历史文件或解除 Flood wait。")
         self._chk_takeout.toggled.connect(self._sync_takeout_chip)
         self._chk_group = self._toggle("下载相册分组", tip="识别并按 Telegram 媒体组处理相册内容。")
         self._chk_proxy = self._toggle("启用代理", tip="通过下方填写的代理地址连接 Telegram。")
