@@ -72,7 +72,10 @@ FAIL_BG = "rgba(248, 113, 113, 0.08)"
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 QSS = f"""
-#Root {{ background: {BG}; }}
+#Root {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 {BG}, stop:0.5 #131A13, stop:1 {BG});
+}}
 #Root * {{ color: {INK}; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 13px; }}
 QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Consolas, "Cascadia Mono", monospace; }}
 
@@ -84,22 +87,22 @@ QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Conso
   background: {PANEL};
   border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 3px;
 }}
-#Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 2px; }}
+#Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 2px; color: {ACC}; }}
 #Chip {{ color: {ACC}; border: 1px solid {LINE2}; border-radius: 3px; padding: 2px 10px;
          font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; letter-spacing: 2px; }}
 #ChipDim {{ color: {DIM}; border: 1px solid {LINE}; border-radius: 3px; padding: 2px 10px;
             font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; letter-spacing: 2px; }}
 #Path {{ color: {DIM}; font-size: 12px; }}
-#SecTitle {{ color: {DIM}; font-size: 11px; font-weight: 700; letter-spacing: 2px; }}
-#SecCount {{ color: {ACC}; font-size: 12px; font-weight: 700; }}
-#FieldLabel {{ color: {DIM}; font-size: 11px; letter-spacing: 1px; }}
-#Recog {{ color: {DIM}; font-size: 12px; }}
+#SecTitle {{ color: {DIM}; font-size: 10px; font-weight: 700; letter-spacing: 2px; }}
+#SecCount {{ color: {ACC}; font-size: 12px; font-weight: 700; font-family: Consolas, "Cascadia Mono", monospace; }}
+#FieldLabel {{ color: {DIM}; font-size: 10px; letter-spacing: 1px; }}
+#Recog {{ color: {DIM}; font-size: 11px; }}
 #BigTitle {{ font-size: 18px; font-weight: 700; }}
 #BigUrl {{ color: {DIM}; font-size: 12px; }}
 #BigPct {{ font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 54px; font-weight: 700; color: {ACC}; }}
 #BigPctUnit {{ color: {DIM}; font-size: 18px; }}
-#Meta {{ color: {DIM}; font-size: 12px; }}
-#MetaVal {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
+#Meta {{ color: {DIM}; font-size: 11px; letter-spacing: 1px; }}
+#MetaVal {{ color: {ACC}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; font-weight: 700; }}
 #Badge {{ color: {DIM}; border: 1px solid {LINE}; border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }}
 #Badge[status="running"] {{ color: {ACC}; border-color: {ACC_LINE}; background: {ACC_BG}; }}
 #Badge[status="done"] {{ color: {DONE}; border-color: {LINE}; }}
@@ -109,6 +112,7 @@ QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Conso
 #LogTitle {{ color: {DIM}; font-size: 11px; letter-spacing: 1px; }}
 #LogToggle {{ background: transparent; border: none; color: {DIM}; font-size: 11px; letter-spacing: 2px; padding: 0; text-align: left; }}
 #LogToggle:hover {{ color: {ACC}; }}
+#LogView {{ color: #9DCB6A; }}
 
 QTextEdit, QLineEdit, QComboBox, QSpinBox {{
   background: {WELL};
@@ -116,7 +120,7 @@ QTextEdit, QLineEdit, QComboBox, QSpinBox {{
   selection-background-color: {ACC}; selection-color: {ON};
 }}
 QTextEdit {{ padding: 8px 11px; }}
-QLineEdit, QComboBox, QSpinBox {{ padding: 6px 10px; min-height: 34px; }}
+QLineEdit, QComboBox, QSpinBox {{ padding: 3px 9px; min-height: 27px; }}
 QTextEdit:hover, QLineEdit:hover, QComboBox:hover, QSpinBox:hover {{ border-color: {LINE2}; }}
 QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {ACC}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {FAINT}; border-color: {LINE}; background: #0A0F0A; }}
@@ -134,7 +138,7 @@ QSpinBox::up-button, QSpinBox::down-button {{ width: 0; height: 0; border: none;
 
 QPushButton {{
   background: transparent; color: {INK};
-  border: 1px solid {LINE}; border-radius: 6px; padding: 6px 16px; min-height: 34px;
+  border: 1px solid {LINE}; border-radius: 5px; padding: 4px 14px; min-height: 30px;
 }}
 QPushButton:hover {{ background: {PANEL2}; border-color: {LINE2}; }}
 QPushButton:pressed {{ background: {PANEL2}; color: {ACC}; border-color: {ACC_LINE}; }}
@@ -148,8 +152,8 @@ QPushButton#Stop:hover {{ background: rgba(229, 181, 103, 0.08); border-color: {
 QPushButton#Stop:pressed {{ background: rgba(229, 181, 103, 0.14); color: {WARN}; border-color: {WARN}; }}
 QPushButton#Stop:disabled {{ color: {FAINT}; border-color: {LINE}; background: transparent; }}
 QPushButton#Toggle {{
-  padding: 6px 12px; color: {DIM}; border: 1px solid {LINE};
-  border-radius: 6px; background: transparent; font-size: 13px; min-height: 34px;
+  padding: 3px 10px; color: {DIM}; border: 1px solid {LINE};
+  border-radius: 5px; background: transparent; font-size: 12px; min-height: 27px;
 }}
 QPushButton#Toggle:hover {{ color: {INK}; border-color: {LINE2}; background: {PANEL2}; }}
 QPushButton#Toggle:checked {{
@@ -277,13 +281,13 @@ class CellsBar(QWidget):
             rect = QRectF(x, bounds.y(), cell_width, bounds.height())
             fill = max(0.0, min(1.0, on - i))
             if fill > 0:
-                # 点亮格带磷光辉光（与主界面大数字同属一个光源）
-                halo = QColor(ACC)
-                halo.setAlpha(60)
+                is_head = fill < 1.0  # 扫描前沿：电子束亮头
+                halo = QColor(ACC_HI if is_head else ACC)
+                halo.setAlpha(110 if is_head else 60)
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(halo)
                 painter.drawRoundedRect(rect.adjusted(-2, -3, 2, 3), 3, 3)
-                painter.setBrush(active if fill < 1 else QColor(ACC))
+                painter.setBrush(QColor(ACC_HI) if is_head else QColor(ACC))
                 painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2.5, 2.5)
             else:
                 painter.setPen(Qt.NoPen)
@@ -536,6 +540,47 @@ class FileRow(QFrame):
             self.info.setText(txt)
 
 
+class ScanlineRoot(QWidget):
+    """带 CRT 扫描线肌理的根画布：磷光屏的基底，不是装饰贴图。"""
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        line = QColor("#000000")
+        line.setAlpha(14)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(line)
+        h = self.height()
+        y = 2
+        while y < h:
+            painter.drawRect(0, y, self.width(), 1)
+            y += 4
+        # 屏幕边缘轻微暗角，模拟显像管
+        vignette = QColor("#000000")
+        vignette.setAlpha(38)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(vignette, 2))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+        # 缓行磷光扫过：示波器的时基扫描（仅下载中）
+        if self._sweep_active:
+            sweep_y = int((self._sweep_phase * h) % (h + 60)) - 30
+            for dy, alpha in ((0, 26), (-6, 12), (6, 12), (-12, 5), (12, 5)):
+                band = QColor(ACC)
+                band.setAlpha(alpha)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(band)
+                painter.drawRect(0, sweep_y + dy, self.width(), 2)
+
+    _sweep_phase = 0.0
+    _sweep_active = False
+
+    def advance_sweep(self, px_per_tick: float = 1.5) -> None:
+        self._sweep_active = px_per_tick > 0
+        if self._sweep_active:
+            self._sweep_phase += px_per_tick / max(1, self.height())
+        self.update()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -558,7 +603,7 @@ class MainWindow(QMainWindow):
         self._app_log: list = []
 
         # 固定画布 + 等比缩放
-        self._design = QWidget()
+        self._design = ScanlineRoot()
         self._design.setObjectName("Root")
         self._build_ui()
         self._design.setFixedSize(DESIGN_W, DESIGN_H)
@@ -593,6 +638,11 @@ class MainWindow(QMainWindow):
             self._check_login_status()
 
         QTimer.singleShot(0, self._fit)
+
+        # 磷光时基扫描：仅下载中运行
+        self._sweep_timer = QTimer(self)
+        self._sweep_timer.setInterval(33)
+        self._sweep_timer.timeout.connect(lambda: self._design.advance_sweep())
 
     # ---- 窗口等比缩放 ----
 
@@ -654,7 +704,7 @@ class MainWindow(QMainWindow):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(4)
+        v.setSpacing(3)
         lb = QLabel(label)
         lb.setObjectName("FieldLabel")
         v.addWidget(lb)
@@ -694,16 +744,23 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         root = QVBoxLayout(self._design)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(12)
+        root.setContentsMargins(14, 12, 14, 14)
+        root.setSpacing(10)
 
         # ---- 顶栏 ----
         hdr = QFrame()
         hdr.setObjectName("Hdr")
         hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(16, 10, 16, 10)
-        self._lbl_brand = QLabel('TDLauncher<span style="color:%s">_</span>' % ACC)
+        hl.setContentsMargins(14, 6, 14, 6)
+        self._lbl_brand = QLabel('TDLauncher<span style="color:%s">_</span>' % INK)
         self._lbl_brand.setObjectName("Brand")
+        bglow = QGraphicsDropShadowEffect(self._lbl_brand)
+        bglow.setBlurRadius(18)
+        bglow.setOffset(0, 0)
+        bc = QColor(ACC)
+        bc.setAlpha(90)
+        bglow.setColor(bc)
+        self._lbl_brand.setGraphicsEffect(bglow)
         hl.addWidget(self._lbl_brand)
         hl.addSpacing(14)
         self._lbl_row = QLabel("")
@@ -728,8 +785,8 @@ class MainWindow(QMainWindow):
         links = QFrame()
         links.setObjectName("Panel")
         ll = QVBoxLayout(links)
-        ll.setContentsMargins(16, 14, 16, 14)
-        ll.setSpacing(10)
+        ll.setContentsMargins(14, 12, 14, 10)
+        ll.setSpacing(8)
         t = QLabel("下载链接 · 每行一个任务")
         t.setObjectName("SecTitle")
         ll.addWidget(t)
@@ -750,21 +807,21 @@ class MainWindow(QMainWindow):
         body.addWidget(links, 5)
 
         right = QVBoxLayout()
-        right.setSpacing(12)
+        right.setSpacing(10)
         body.addLayout(right, 14)
 
         # 参数
         params = QFrame()
         params.setObjectName("Panel")
         pl = QVBoxLayout(params)
-        pl.setContentsMargins(16, 14, 16, 14)
-        pl.setSpacing(10)
+        pl.setContentsMargins(14, 10, 14, 10)
+        pl.setSpacing(7)
         params_title = QLabel("下载参数")
         params_title.setObjectName("SecTitle")
         pl.addWidget(params_title)
         grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(10)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
         for i, s in enumerate([16, 12, 12, 8, 8]):
             grid.setColumnStretch(i, s)
 
@@ -806,7 +863,7 @@ class MainWindow(QMainWindow):
         pl.addLayout(grid)
 
         toggles = QHBoxLayout()
-        toggles.setSpacing(8)
+        toggles.setSpacing(6)
         self._chk_comments = self._toggle("评论区下载", tip="下载帖子媒体后，继续导出并下载该帖评论中的媒体。")
         self._chk_subfolder = self._toggle("按帖归档", tip="将每条链接的媒体保存到“频道名称/消息 ID”独立目录。")
         self._chk_skip_same = self._toggle("跳过重复文件", tip="跳过下载目录中已存在且名称、大小相同的文件。")
@@ -824,14 +881,14 @@ class MainWindow(QMainWindow):
 
         # 中段
         work = QHBoxLayout()
-        work.setSpacing(12)
+        work.setSpacing(10)
         right.addLayout(work, 1)
 
         # 队列
         queue = QFrame()
         queue.setObjectName("Panel")
         ql = QVBoxLayout(queue)
-        ql.setContentsMargins(16, 14, 16, 14)
+        ql.setContentsMargins(14, 12, 14, 12)
         ql.setSpacing(8)
         qhead = QHBoxLayout()
         qh = QLabel("下载队列")
@@ -850,7 +907,7 @@ class MainWindow(QMainWindow):
         prog = QFrame()
         prog.setObjectName("Panel")
         prl = QVBoxLayout(prog)
-        prl.setContentsMargins(16, 14, 16, 14)
+        prl.setContentsMargins(14, 12, 14, 12)
         prl.setSpacing(10)
         self._lbl_progress_title = QLabel("下载状态")
         self._lbl_progress_title.setObjectName("SecTitle")
@@ -933,9 +990,10 @@ class MainWindow(QMainWindow):
         self._btn_log.toggled.connect(self._toggle_log)
         logcol.addWidget(self._btn_log, 0, Qt.AlignLeft)
         self._txt_output = QTextEdit()
+        self._txt_output.setObjectName("LogView")
         self._txt_output.setReadOnly(True)
         self._txt_output.setFont(QFont("Consolas", 10))
-        self._log_height = 88
+        self._log_height = 96
         self._txt_output.setFixedHeight(self._log_height)
         self._txt_output.setVisible(True)
         self._log_animation = QVariantAnimation(self)
@@ -971,6 +1029,13 @@ class MainWindow(QMainWindow):
         botrow.addWidget(self._btn_stop)
         self._btn_start = QPushButton("开始下载")
         self._btn_start.setObjectName("Primary")
+        sglow = QGraphicsDropShadowEffect(self._btn_start)
+        sglow.setBlurRadius(22)
+        sglow.setOffset(0, 0)
+        sc = QColor(ACC)
+        sc.setAlpha(80)
+        sglow.setColor(sc)
+        self._btn_start.setGraphicsEffect(sglow)
         self._btn_start.clicked.connect(self._start_download)
         botrow.addWidget(self._btn_start)
         rightbtns.addLayout(botrow)
@@ -1006,7 +1071,7 @@ class MainWindow(QMainWindow):
         self._log_animation.stop()
         self._btn_log.setText("下载日志 ▾" if on else "下载日志 ▸")
         self._log_animation.setStartValue(self._log_height)
-        self._log_animation.setEndValue(88 if on else 0)
+        self._log_animation.setEndValue(96 if on else 0)
         if on:
             self._txt_output.setVisible(True)
         self._log_animation.start()
@@ -1702,6 +1767,11 @@ class MainWindow(QMainWindow):
     def _update_ui_running(self, running: bool):
         if not running:
             self._set_badge_breathing(False)
+        if running:
+            self._sweep_timer.start()
+        else:
+            self._sweep_timer.stop()
+            self._design.advance_sweep(0)
         self._btn_start.setText("下载中…" if running else "开始下载")
         self._btn_start.setEnabled(not running)
         self._btn_stop.setEnabled(running)

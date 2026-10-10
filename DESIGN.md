@@ -35,10 +35,12 @@
 
 ## Signature moves
 
-1. **扫描迹线**：24 格 CellsBar，点亮格发光、空白格 `#1E291C`，即一条水平扫描描迹。动画 240ms OutCubic。
-2. **LED 队列**：StatusMark 16px——queued 空灯位圆环（#2A3628），running 实心 LED + 7px 光晕，done 低饱和绿实心，failed 红实心，stopped 灰环。
-3. **顶栏芯片**：运行时显示 `ROW xx/yy`（等宽、磷光描边）= 当前扫描行；TAKEOUT 开启时显示 `TAKEOUT`（刻度灰）。
-4. **扫描游标**：活动队列行左侧 3px 磷光竖条（QVariantAnimation 160ms 淡入）。
+1. **扫描迹线**：24 格 CellsBar，点亮格发光、空白格 `#1E291C`；最后一个部分点亮格是**扫描亮头**（ACC_HI 色 + alpha 110 大光晕），模拟电子束前沿。动画 240ms OutCubic。
+2. **时基扫描**：根画布 `ScanlineRoot` 自带 CRT 扫描线（alpha 14 黑线每 4px）与边缘暗角；下载中一条磷光带以 ~45px/s 自上而下扫过全屏（33ms 定时器，仅 running 时激活）。
+3. **LED 队列**：StatusMark 16px——queued 空灯位圆环（#2A3628），running 实心 LED + 7px 光晕，done 低饱和绿实心，failed 红实心，stopped 灰环。
+4. **顶栏芯片**：运行时显示 `ROW xx/yy`（等宽、磷光描边）= 当前扫描行；TAKEOUT 开启时显示 `TAKEOUT`（刻度灰）。
+5. **扫描游标**：活动队列行左侧 3px 磷光竖条（QVariantAnimation 160ms 淡入）。
+6. **发光元素**：品牌标（alpha 90）、大百分比（blur 28, alpha 70）、开始按钮（alpha 80）、迹线点亮格与亮头。其余元素不发光。
 
 ## Components
 
@@ -51,9 +53,11 @@
 
 ## Layout
 
-固定 1280×720 画布等比缩放。根 margin 16、模块间距 12、面板内边距 (16,14)。
-顶栏（brand + 芯片 + tdl 路径）→ 左链接栏（stretch 5）→ 右栏（stretch 14）：参数（五格 grid [16,12,12,8,8] + 七个 Toggle）→ 工作区（队列 stretch 5 : 进度 stretch 12）。
-进度区：标题行（BigTitle + BigUrl + Badge）→ amount 行（大百分比固定栏 + 迹线 + meta 速度/剩余/文件，spacing 24）→ 逐文件列表（底 padding 4 防裁切）→ 日志（88px 可折叠）+ 按钮列。
+固定 1280×720 画布等比缩放。根 margin (14,12)、模块间距 10。
+顶栏紧凑（内边距 (14,6)）→ 左链接栏（stretch 5，内边距 (14,12,14,10)）→ 右栏（stretch 14）：参数（内边距 (14,10)、控件高 27、Toggle 高 27、字段标签 10px——**刻意压缩，把高度让给内容区**）→ 工作区（队列 stretch 5 : 进度 stretch 12，内边距 (14,12)）。
+进度区：标题行 → amount 行（大百分比固定 104px 栏 + 迹线 13px + meta）→ 逐文件列表 → 日志（96px 可折叠，文字 `#9DCB6A` 仪器绿）+ 按钮列。
+
+字阶：SecTitle 10px / FieldLabel 10px / 正文 13px / 控件 12px / MetaVal 13px Bold 磷光 / 大百分比 54px Bahnschrift。
 
 ## Hard rules（此世界内）
 
