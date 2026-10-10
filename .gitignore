@@ -33,3 +33,8 @@ release/
 *.bak
 preview/
 tools/preview/
+
+# impeccable 工作区（本地产物）
+.impeccable/
+.claude/skills/
+.claude/agents/

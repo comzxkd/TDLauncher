@@ -47,23 +47,23 @@ def _find_tdl() -> Optional[str]:
     return None
 
 
-# ---- 精密控制台配色（单一强调色 + 分层中性灰）----
-BG = "#0B0D0E"      # 深空灰底
-PANEL = "#121517"   # 面板
-PANEL2 = "#171B1E"  # 抬升层（hover / 弹出 / 按下）
-WELL = "#0D1012"    # 输入井
-LINE = "#242A2F"    # 描边
-LINE2 = "#323A41"   # hover 描边
-INK = "#E4E9EE"     # 主文字
-DIM = "#8A94A0"     # 次文字
-FAINT = "#5A636D"   # 占位 / 禁用
-ACC = "#4ADE80"     # 荧光绿（唯一强调色：状态 / 进度 / 焦点）
-ACC_HI = "#7CF0A6"  # 强调色亮端（渐变 / hover）
-ACC_LINE = "#3E6B4E"  # 强调色描边（40% 感）
-ACC_BG = "rgba(74, 222, 128, 0.10)"   # 强调色底
-ACC_BG_ROW = "rgba(74, 222, 128, 0.055)"  # 选中行底
-ON = "#06130B"      # 强调色上的文字
-DONE = "#3E8E62"    # 完成（低饱和绿）
+# ---- 深夜示波器配色（暖黑机箱 + 磷光黄绿描迹）----
+BG = "#141B14"      # 暖黑地面
+PANEL = "#101710"   # 面板（略暗于地面，仪器分区）
+PANEL2 = "#18211A"  # 抬升层（hover / 弹出 / 按下）
+WELL = "#0C120C"    # 输入井
+LINE = "#2A3628"    # 描边
+LINE2 = "#3A4A34"   # hover 描边
+INK = "#E7EFE4"     # 主文字（磷光白）
+DIM = "#7E8F7A"     # 次文字（刻度灰绿）
+FAINT = "#4E5C4B"   # 占位 / 禁用
+ACC = "#B7E34A"     # 磷光黄绿（唯一强调色：运行 / 进度 / 焦点）
+ACC_HI = "#D4F27A"  # 磷光亮端
+ACC_LINE = "#5A7038"  # 磷光描边
+ACC_BG = "rgba(183, 227, 74, 0.08)"   # 磷光底
+ACC_BG_ROW = "rgba(183, 227, 74, 0.06)"  # 选中行底
+ON = "#141B14"      # 磷光上的文字
+DONE = "#5A8A44"    # 完成（低饱和绿）
 WARN = "#E5B567"
 FAIL = "#F87171"
 FAIL_LINE = "#5C3A3F"
@@ -77,14 +77,18 @@ QSS = f"""
 QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Consolas, "Cascadia Mono", monospace; }}
 
 #Hdr {{
-  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #161A1E, stop:0.15 {PANEL}, stop:1 #0F1214);
-  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 10px;
+  background: {PANEL};
+  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 3px;
 }}
 #Panel {{
-  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #15191C, stop:0.12 {PANEL}, stop:1 #0F1214);
-  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 10px;
+  background: {PANEL};
+  border: 1px solid {LINE}; border-top-color: {LINE2}; border-radius: 3px;
 }}
 #Brand {{ font-family: Consolas, "Cascadia Mono", monospace; font-size: 16px; font-weight: bold; letter-spacing: 2px; }}
+#Chip {{ color: {ACC}; border: 1px solid {LINE2}; border-radius: 3px; padding: 2px 10px;
+         font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; letter-spacing: 2px; }}
+#ChipDim {{ color: {DIM}; border: 1px solid {LINE}; border-radius: 3px; padding: 2px 10px;
+            font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; letter-spacing: 2px; }}
 #Path {{ color: {DIM}; font-size: 12px; }}
 #SecTitle {{ color: {DIM}; font-size: 11px; font-weight: 700; letter-spacing: 2px; }}
 #SecCount {{ color: {ACC}; font-size: 12px; font-weight: 700; }}
@@ -92,8 +96,8 @@ QLineEdit, QTextEdit, #Path, #BigUrl, #Stat, #QPct, #FInfo {{ font-family: Conso
 #Recog {{ color: {DIM}; font-size: 12px; }}
 #BigTitle {{ font-size: 18px; font-weight: 700; }}
 #BigUrl {{ color: {DIM}; font-size: 12px; }}
-#BigPct {{ font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 44px; font-weight: 700; }}
-#BigPctUnit {{ color: {DIM}; font-size: 16px; }}
+#BigPct {{ font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei UI", sans-serif; font-size: 54px; font-weight: 700; color: {ACC}; }}
+#BigPctUnit {{ color: {DIM}; font-size: 18px; }}
 #Meta {{ color: {DIM}; font-size: 12px; }}
 #MetaVal {{ color: {INK}; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; }}
 #Badge {{ color: {DIM}; border: 1px solid {LINE}; border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }}
@@ -115,7 +119,7 @@ QTextEdit {{ padding: 8px 11px; }}
 QLineEdit, QComboBox, QSpinBox {{ padding: 6px 10px; min-height: 34px; }}
 QTextEdit:hover, QLineEdit:hover, QComboBox:hover, QSpinBox:hover {{ border-color: {LINE2}; }}
 QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {ACC}; }}
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {FAINT}; border-color: {LINE}; background: #0B0E10; }}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: {FAINT}; border-color: {LINE}; background: #0A0F0A; }}
 QComboBox {{ padding-right: 32px; }}
 QComboBox::drop-down {{
   subcontrol-origin: padding; subcontrol-position: top right; width: 30px;
@@ -124,7 +128,7 @@ QComboBox::drop-down {{
 }}
 QComboBox QAbstractItemView {{
   background: {PANEL2}; border: 1px solid {LINE2}; color: {INK};
-  selection-background-color: rgba(74, 222, 128, 0.14); selection-color: {INK}; outline: none;
+  selection-background-color: rgba(183, 227, 74, 0.14); selection-color: {INK}; outline: none;
 }}
 QSpinBox::up-button, QSpinBox::down-button {{ width: 0; height: 0; border: none; }}
 
@@ -136,10 +140,10 @@ QPushButton:hover {{ background: {PANEL2}; border-color: {LINE2}; }}
 QPushButton:pressed {{ background: {PANEL2}; color: {ACC}; border-color: {ACC_LINE}; }}
 QPushButton:disabled {{ background: transparent; color: {FAINT}; border-color: {LINE}; }}
 QPushButton#Primary {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {ACC_HI}, stop:1 {ACC}); color: {ON}; border-color: {ACC_HI}; font-weight: 700; }}
-QPushButton#Primary:hover {{ background: {ACC_HI}; border-color: #A6F5C3; }}
+QPushButton#Primary:hover {{ background: {ACC_HI}; border-color: #E4F79E; }}
 QPushButton#Primary:pressed {{ background: {ACC}; }}
-QPushButton#Primary:disabled {{ background: #1C2B22; color: #4E5F54; border-color: #1C2B22; }}
-QPushButton#Stop {{ color: {WARN}; border-color: #4A4030; font-weight: 600; }}
+QPushButton#Primary:disabled {{ background: #232B1A; color: #55603F; border-color: #232B1A; }}
+QPushButton#Stop {{ color: {WARN}; border-color: #6B5A38; font-weight: 600; }}
 QPushButton#Stop:hover {{ background: rgba(229, 181, 103, 0.08); border-color: {WARN}; }}
 QPushButton#Stop:pressed {{ background: rgba(229, 181, 103, 0.14); color: {WARN}; border-color: {WARN}; }}
 QPushButton#Stop:disabled {{ color: {FAINT}; border-color: {LINE}; background: transparent; }}
@@ -155,11 +159,11 @@ QPushButton#Toggle:checked {{
 
 QMenu {{ background: {PANEL2}; color: {INK}; border: 1px solid {LINE2}; padding: 4px; border-radius: 6px; }}
 QMenu::item {{ background: transparent; color: {INK}; padding: 6px 28px 6px 10px; border-radius: 4px; }}
-QMenu::item:selected {{ background: rgba(74, 222, 128, 0.14); color: {ACC}; }}
+QMenu::item:selected {{ background: rgba(183, 227, 74, 0.14); color: {ACC}; }}
 QMenu::item:disabled {{ color: {FAINT}; }}
 QMenu::separator {{ height: 1px; background: {LINE}; margin: 4px 6px; }}
 
-QProgressBar {{ background: #171C20; border: none; border-radius: 2px; }}
+QProgressBar {{ background: #1E291C; border: none; border-radius: 2px; }}
 QProgressBar::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ACC}, stop:1 {ACC_HI}); border-radius: 2px; }}
 QProgressBar[status="done"]::chunk {{ background: {DONE}; }}
 QProgressBar[status="failed"]::chunk {{ background: {FAIL}; }}
@@ -178,7 +182,7 @@ QProgressBar[status="stopped"]::chunk {{ background: {FAINT}; }}
 #Scroll > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; border: none; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {LINE2}; border-radius: 4px; min-height: 24px; }}
-QScrollBar::handle:vertical:hover {{ background: #45505A; }}
+QScrollBar::handle:vertical:hover {{ background: #4E5F43; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QLabel {{ background: transparent; }}
@@ -268,24 +272,31 @@ class CellsBar(QWidget):
         on = self._display_value / 100.0 * self._count
         active = QColor(ACC)
         active.setAlpha(90)
-        painter.setPen(Qt.NoPen)
         for i in range(self._count):
             x = bounds.x() + i * (cell_width + gap)
             rect = QRectF(x, bounds.y(), cell_width, bounds.height())
-            painter.setBrush(QColor("#1B2126"))
-            painter.drawRoundedRect(rect, 2.5, 2.5)
             fill = max(0.0, min(1.0, on - i))
             if fill > 0:
+                # 点亮格带磷光辉光（与主界面大数字同属一个光源）
+                halo = QColor(ACC)
+                halo.setAlpha(60)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(halo)
+                painter.drawRoundedRect(rect.adjusted(-2, -3, 2, 3), 3, 3)
                 painter.setBrush(active if fill < 1 else QColor(ACC))
                 painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2.5, 2.5)
+            else:
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor("#1E291C"))
+                painter.drawRoundedRect(rect, 2.5, 2.5)
 
 
 class StatusMark(QWidget):
-    """队列行状态图标：矢量绘制，粗细对齐，不用文本符号。"""
+    """队列行状态 LED：磷光指示灯体系，运行态发光。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(14, 14)
+        self.setFixedSize(16, 16)
         self._status = "queued"
         self._active = False
 
@@ -300,31 +311,27 @@ class StatusMark(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        color = {"running": ACC, "done": DONE, "failed": FAIL,
-                 "stopped": DIM}.get(self._status, ACC if self._active else DIM)
-        pen = QPen(QColor(color), 1.6)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
         c = self.rect().center()
-        if self._status == "running":
-            painter.setBrush(QColor(color))
-            painter.drawPolygon([QPointF(c.x() - 3, c.y() - 4),
-                                 QPointF(c.x() - 3, c.y() + 4),
-                                 QPointF(c.x() + 4.5, c.y())])
-        elif self._status == "done":
-            painter.drawPolyline([QPointF(c.x() - 4.5, c.y() + 0.5),
-                                  QPointF(c.x() - 1, c.y() + 4),
-                                  QPointF(c.x() + 5, c.y() - 4)])
-        elif self._status == "failed":
-            painter.drawLine(QPointF(c.x() - 4, c.y() - 4), QPointF(c.x() + 4, c.y() + 4))
-            painter.drawLine(QPointF(c.x() + 4, c.y() - 4), QPointF(c.x() - 4, c.y() + 4))
-        elif self._status == "stopped":
-            painter.setBrush(QColor(color))
-            painter.drawRoundedRect(QRectF(c.x() - 3.5, c.y() - 3.5, 7, 7), 1.5, 1.5)
+        color = {"running": ACC, "done": DONE, "failed": FAIL,
+                 "stopped": DIM}.get(self._status, ACC if self._active else "#2A3628")
+        qc = QColor(color)
+        if self._status in ("running", "done", "failed"):
+            # 实心 LED + 磷光辉光（运行态最亮）
+            if self._status == "running":
+                halo = QColor(ACC)
+                halo.setAlpha(56)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(halo)
+                painter.drawEllipse(QPointF(c.x(), c.y()), 7, 7)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(qc)
+            painter.drawEllipse(QPointF(c.x(), c.y()), 3.5, 3.5)
         else:
-            painter.drawEllipse(QPointF(c.x(), c.y()), 4, 4)
+            # 空灯位：描边圆环
+            pen = QPen(qc, 1.4)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(c.x(), c.y()), 3.5, 3.5)
 
 
 class QueueRow(QFrame):
@@ -698,6 +705,15 @@ class MainWindow(QMainWindow):
         self._lbl_brand = QLabel('TDLauncher<span style="color:%s">_</span>' % ACC)
         self._lbl_brand.setObjectName("Brand")
         hl.addWidget(self._lbl_brand)
+        hl.addSpacing(14)
+        self._lbl_row = QLabel("")
+        self._lbl_row.setObjectName("Chip")
+        self._lbl_row.hide()
+        hl.addWidget(self._lbl_row)
+        self._lbl_takeout = QLabel("TAKEOUT")
+        self._lbl_takeout.setObjectName("ChipDim")
+        self._lbl_takeout.hide()
+        hl.addWidget(self._lbl_takeout)
         hl.addStretch(1)
         self._lbl_path = QLabel("tdl")
         self._lbl_path.setObjectName("Path")
@@ -796,6 +812,7 @@ class MainWindow(QMainWindow):
         self._chk_skip_same = self._toggle("跳过重复文件", tip="跳过下载目录中已存在且名称、大小相同的文件。")
         self._chk_resume = self._toggle("断点续传", tip="继续下载未完成的文件，避免从头重新传输。")
         self._chk_takeout = self._toggle("Takeout 模式", tip="使用 Telegram Takeout 会话下载，适合批量获取媒体。")
+        self._chk_takeout.toggled.connect(self._sync_takeout_chip)
         self._chk_group = self._toggle("下载相册分组", tip="识别并按 Telegram 媒体组处理相册内容。")
         self._chk_proxy = self._toggle("启用代理", tip="通过下方填写的代理地址连接 Telegram。")
         for w in (self._chk_comments, self._chk_subfolder, self._chk_skip_same,
@@ -859,6 +876,15 @@ class MainWindow(QMainWindow):
         big.setSpacing(3)
         self._lbl_bigpct = QLabel("0")
         self._lbl_bigpct.setObjectName("BigPct")
+        self._lbl_bigpct.setFixedWidth(104)
+        self._lbl_bigpct.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        glow = QGraphicsDropShadowEffect(self._lbl_bigpct)
+        glow.setBlurRadius(28)
+        glow.setOffset(0, 0)
+        gc = QColor(ACC)
+        gc.setAlpha(70)
+        glow.setColor(gc)
+        self._lbl_bigpct.setGraphicsEffect(glow)
         self._bigpct_display = 0.0
         self._bigpct_animation = QVariantAnimation(self)
         self._bigpct_animation.setDuration(180)
@@ -872,6 +898,7 @@ class MainWindow(QMainWindow):
         ar = QVBoxLayout()
         ar.setSpacing(10)
         self._cells = CellsBar(24)
+        self._cells.setFixedHeight(13)
         ar.addWidget(self._cells)
         meta = QHBoxLayout()
         meta.setSpacing(24)
@@ -891,6 +918,7 @@ class MainWindow(QMainWindow):
 
         # 逐文件列表
         self._files_scroll, self._files_box = self._scroll()
+        self._files_box.setContentsMargins(0, 0, 0, 4)
         prl.addWidget(self._files_scroll, 1)
 
         # 底部：tdl 输出 + 按钮（同一行）
@@ -950,6 +978,10 @@ class MainWindow(QMainWindow):
         prl.addLayout(pfoot)
 
         work.addWidget(prog, 12)
+
+    def _sync_takeout_chip(self, on):
+        if hasattr(self, "_lbl_takeout"):
+            self._lbl_takeout.setVisible(bool(on))
 
     def _mkmeta(self, label, val_widget):
         w = QWidget()
@@ -1046,6 +1078,7 @@ class MainWindow(QMainWindow):
         self._chk_skip_same.setChecked(c.skip_same)
         self._chk_resume.setChecked(c.resume)
         self._chk_takeout.setChecked(c.takeout)
+        self._sync_takeout_chip(c.takeout)
         self._chk_group.setChecked(c.group)
         self._chk_comments.setChecked(getattr(c, "download_comments", False))
         self._chk_subfolder.setChecked(c.auto_subfolder)
@@ -1480,6 +1513,12 @@ class MainWindow(QMainWindow):
     def _refresh_active_count(self):
         active = sum(1 for j in self._jobs if j.status == "running")
         self._lbl_qcount.setText(f"{active}/{len(self._jobs)} 活动")
+        running_idx = next((i + 1 for i, j in enumerate(self._jobs) if j.status == "running"), 0)
+        if running_idx:
+            self._lbl_row.setText(f"ROW {running_idx:02d}/{len(self._jobs):02d}")
+            self._lbl_row.show()
+        else:
+            self._lbl_row.hide()
 
     def _finish_all(self):
         self._update_ui_running(False)
