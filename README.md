@@ -1,220 +1,94 @@
-<!-- markdownlint-disable MD033 -->
-<h1 align="center">TDLauncher</h1>
+<div align="center">
+  <picture>
+    <img src="resources/hero.svg" width="800" alt="TDLauncher Interface">
+  </picture>
 
-<p align="center">
-  <b>Telegram 高速下载器 · 可视化桌面工具</b><br>
-  <sub>为 <a href="https://github.com/iyear/tdl">tdl</a> 提供 Windows 图形界面封装</sub>
-</p>
+  <h1>TDLauncher</h1>
+  <p><b>为 Telegram 高速下载引擎 <a href="https://github.com/iyear/tdl">tdl</a> 打造的终端风图形控制台</b></p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/python-3.12+-blue?logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/PySide6-6.11-41cd52?logo=qt" alt="PySide6">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-  <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?logo=windows" alt="Windows">
-</p>
+  <p>
+    <img src="https://img.shields.io/badge/python-3.12+-blue?logo=python" alt="Python">
+    <img src="https://img.shields.io/badge/PySide6-6.11-41cd52?logo=qt" alt="PySide6">
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+    <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?logo=windows" alt="Windows">
+  </p>
+</div>
 
 ---
 
-[English](#english) · [中文](#中文)
+**[English](#english)** · [简体中文](#中文)
 
 ---
 
 <a id="english"></a>
 
-## TDLauncher
+## Beyond the Command Line
 
-A Windows desktop GUI for **tdl** — the Telegram downloader CLI. Paste Telegram links, pick your options, and download media with real-time progress.
+[tdl](https://github.com/iyear/tdl) is arguably the most powerful Telegram downloader available, capable of saturating your bandwidth and exporting restricted content. However, managing command-line flags, bypassing API flood limits, and tracking the progress of 100+ files can be overwhelming.
 
-### Features
+**TDLauncher** bridges the gap between hacker-level efficiency and desktop usability.
 
-- 📥 **Link-based download** — supports public posts (`t.me/channel/123`), private channels (`t.me/c/123/456`), comments, and threads
-- 💬 **Comments section download** — auto-export and batch download media from comment threads
-- 📁 **Smart archiving** — organize downloads by channel name + message ID (`ChannelName/12345/`)
-- 🎵 **Content type filter** — all / images / videos / audio / custom extensions
-- ⚙️ **Advanced options** — thread count, concurrency limit, proxy, filename templates, skip-duplicates, resume, takeout mode
-- 📊 **Real-time progress** — progress bars + raw tdl output log
-- 🔄 **Queue mode** — paste multiple links, download sequentially
-- 🚀 **Takeout mode** — reduced rate-limit for bulk downloads
-- 🌙 **Dark theme** — Telegram-inspired dark UI
-
-### Prerequisites
-
-- **Windows** x64
-- **Python 3.12+**
-- **tdl** — download from [GitHub Releases](https://github.com/iyear/tdl/releases)
+* **The Takeout Arsenal:** A dedicated switch for Telegram's "Takeout" mode, bypassing severe rate limits (`Flood wait`) when archiving massive channels.
+* **Intelligent Thread Harvesting:** Paste a single post link, and the engine automatically exports and downloads the entire attached comment thread via JSON parsing.
+* **Safe Sequential Dispatch:** tdl uses an exclusive BoltDB lock. TDLauncher handles the queue safely, preventing database collision errors.
+* **Real-time Phosphor Dashboard:** 33ms-tick progress parsing translates messy terminal stdout into a clean 16:9 cinematic terminal UI.
 
 ### Quick Start
 
+**1. Install Dependencies**
+Download the `tdl.exe` binary from the [tdl releases](https://github.com/iyear/tdl/releases) and place it in your system PATH, or use PowerShell:
 ```powershell
-# 1. Install tdl (one-time)
-# Download tdl_Windows_64bit.zip from https://github.com/iyear/tdl/releases
-# Extract tdl.exe and place it in your PATH, or run:
 iwr -useb https://docs.iyear.me/tdl/install.ps1 | iex
-
-# 2. Login (one-time)
 tdl login -T qr
+```
 
-# 3. Clone & install TDLauncher
+**2. Launch the Console**
+```powershell
 git clone https://github.com/comzxkd/TDLauncher.git
 cd TDLauncher
 pip install -r requirements.txt
-
-# 4. Launch
 python app\main.py
 ```
 
-### Usage
+*For a zero-setup experience, download the pre-packaged portable `.exe` from the [Releases](https://github.com/comzxkd/TDLauncher/releases) page.*
 
-1. **Paste one or more Telegram message links** into the text area
-2. **Select content type** — All, Images, Videos, Audio, or Custom
-3. **Choose download directory**
-4. **Toggle advanced options** as needed:
-   - Comments section download
-   - Auto-archive by channel + message ID
-   - Proxy, threads, concurrency limit
-   - Skip duplicates, resume, takeout mode
-5. **Click "Start Download"** — watch real-time progress in the log panel
+### Engineering Boundaries
 
-#### Example links
-
-```
-https://t.me/telegram/193              # Public post
-https://t.me/c/1697797156/151          # Private channel post
-https://t.me/simisebaisi/50063?comment=211049  # Comment link
-https://t.me/myhostloc/1485524?thread=1485523  # Thread link
-```
-
-### Download (Recommended)
-
-Download the latest pre-built package from [Releases](https://github.com/comzxkd/TDLauncher/releases).
-It includes `TDLauncher.exe` + `tdl.exe` — just unzip and run.
-
-### Build from Source
-
-```powershell
-pip install pyinstaller
-# Download tdl.exe first (see note below)
-pyinstaller --noconsole --name TDLauncher --icon resources/icon.ico ^
-  --add-data "vendor/tdl.exe;vendor" ^
-  app/main.py
-```
-
-> **Note**: The source repository does **not** include `vendor/tdl.exe`. To build your own portable EXE, download `tdl_Windows_64bit.zip` from [tdl releases](https://github.com/iyear/tdl/releases), extract `tdl.exe` into the `vendor/` directory, then run the command above.
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| GUI | PySide6 (Qt 6) |
-| Backend | Python 3.12+ |
-| Download Engine | [tdl](https://github.com/iyear/tdl) (Golang, AGPL-3.0) |
-| Process Management | QProcess (async, non-blocking) |
-
-### Project Structure
-
-```
-TDLauncher/
-├── app/
-│   ├── main.py              ← Entry point
-│   ├── main_window.py       ← Main UI (751 lines)
-│   ├── config.py            ← Config read/write (JSON)
-│   ├── link_parser.py       ← Telegram link parser
-│   ├── command_builder.py   ← tdl command builder
-│   ├── tdl_runner.py        ← QProcess wrapper
-│   └── progress_parser.py   ← Progress extractor
-├── docs/                    ← Design documents
-├── requirements.txt
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
-### Credits
-
-- [iyear/tdl](https://github.com/iyear/tdl) — the incredible Telegram toolkit this project wraps
-- Qt for Python (PySide6) — LGPL-3.0 licensed GUI framework
-
-### License
-
-This project is licensed under the **MIT License**.
-
-The underlying download engine **tdl** is licensed under **AGPL-3.0**. When you run TDLauncher, the `tdl.exe` binary (a separate, unmodified program) is invoked as a subprocess, and its source code is available at [github.com/iyear/tdl](https://github.com/iyear/tdl).
+This project follows an strict "Aggregation" architecture. The UI is licensed under **MIT**, leaving you entirely free to modify the interface. It invokes the unmodified **AGPL-3.0** `tdl` engine as a detached asynchronous `QProcess`, ensuring complete compliance and separation of concerns. 
 
 ---
 
 <a id="中文"></a>
 
-## TDLauncher
+## 终端之上的掌控感
 
-Telegram 高速下载器的 Windows 桌面图形界面。粘贴链接、选择选项，实时查看下载进度。
+[tdl](https://github.com/iyear/tdl) 是目前生态内最强悍的 Telegram 下载引擎，能跑满带宽并轻松跨越私有频道的阻碍。然而，对普通桌面用户而言，在黑框框里拼接长串参数、应对动辄几个小时的 `Flood wait` 限流惩罚、以及在滚屏的日志里寻找下载进度，始终是一种折磨。
 
-### 功能
+**TDLauncher** 为此而生：它不仅是一套皮肤，而是一台解决痛点的调度台。
 
-- 📥 **链接下载** — 支持公开帖子、私有频道、评论链接、话题链接
-- 💬 **评论区下载** — 自动导出并批量下载评论区中的媒体
-- 📁 **智能归档** — 按频道显示名 + 消息 ID 自动分类存放
-- 🎵 **内容过滤** — 全部 / 图片 / 视频 / 音频 / 自定义扩展名
-- ⚙️ **高级选项** — 线程数、并发限制、代理、文件名模板、去重、断点续传、Takeout 模式
-- 📊 **实时进度** — 进度条 + tdl 原始输出日志
-- 🔄 **队列模式** — 粘贴多个链接，依次下载
-- 🚀 **Takeout 模式** — 降低限流惩罚，适合大批量下载
-- 🌙 **深色主题** — Telegram 风格暗色界面
+* **防封神器 Takeout**：一键开启数据导出特权通道。当你需要将整个频道的成百上千个媒体搬空时，彻底告别恼人的限流惩罚。
+* **评论区自动捕获**：只需丢入主帖链接，系统会自动执行「导出讨论树 JSON → 解析总数 → 逐个媒体精确拉取」的三步流，大百分比进度严丝合缝。
+* **队列安全互斥**：底层 tdl 的数据库带有强排他锁。我们将队列串行化并在底层阻断冲突，只把最平滑的任务切换展示给你。
+* **磷光终端美学**：黑绿配色的 16:9 画动画等比缩放引擎，33ms 实时捕捉底层子进程的心跳日志，还原极客风格的下载律动。
 
-### 快速开始
+### 部署指南
 
+**1. 准备核心引擎**
+你可以前往 [tdl releases](https://github.com/iyear/tdl/releases) 手动下载二进制文件，或者用一键脚本安装并扫码登录：
 ```powershell
-# 1. 安装 tdl（仅首次）
-# 从 https://github.com/iyear/tdl/releases 下载 tdl_Windows_64bit.zip
-# 解压 tdl.exe 放到 PATH 目录，或一键安装：
 iwr -useb https://docs.iyear.me/tdl/install.ps1 | iex
-
-# 2. 登录（仅首次）
 tdl login -T qr
+```
 
-# 3. 克隆并安装依赖
+**2. 点火启动**
+```powershell
 git clone https://github.com/comzxkd/TDLauncher.git
 cd TDLauncher
 pip install -r requirements.txt
-
-# 4. 启动
 python app\main.py
 ```
+*如果你不想配置任何环境，请直接前往 [Releases](https://github.com/comzxkd/TDLauncher/releases) 下载包含了环境与引擎的即用版免安装压缩包。*
 
-### 使用说明
+### 开源合规承诺
 
-1. **粘贴一个或多个 Telegram 消息链接**
-2. **选择内容类型** — 全部、图片、视频、音频或自定义
-3. **选择下载目录**
-4. **配置高级选项**（可选）：
-   - 下载评论区媒体
-   - 自动按帖子归档（频道名/消息ID）
-   - 代理、线程数、并发限制
-   - 去重、断点续传、Takeout 模式
-5. **点击「开始下载」** — 在日志面板中查看实时进度
-
-### 直接下载（推荐）
-
-从 [Releases](https://github.com/comzxkd/TDLauncher/releases) 下载最新预打包版本，内含 `TDLauncher.exe` + `tdl.exe`，解压即用。
-
-### 从源码构建
-
-```powershell
-pip install pyinstaller
-# 先下载 tdl.exe（见下方说明）
-pyinstaller --noconsole --name TDLauncher --icon resources/icon.ico ^
-  --add-data "vendor/tdl.exe;vendor" ^
-  app/main.py
-```
-
-> **注意**：源码仓库**不包含** `vendor/tdl.exe`。如需自行打包，请从 [tdl releases](https://github.com/iyear/tdl/releases) 下载 `tdl_Windows_64bit.zip`，解压放入 `vendor/` 目录后再执行上方命令。
-
-### 致谢
-
-- [iyear/tdl](https://github.com/iyear/tdl) — 本项目包装的 Telegram 工具包，功能强大
-- Qt for Python (PySide6) — LGPL-3.0 许可的 GUI 框架
-
-### 许可
-
-本项目采用 **MIT 许可**。
-
-底层下载引擎 **tdl** 采用 **AGPL-3.0 许可**。TDLauncher 以子进程方式调用 tdl.exe（独立、未修改的程序），其源码见 [github.com/iyear/tdl](https://github.com/iyear/tdl)。
+本项目采用纯净的进程外壳设计（QProcess）。外层 GUI 界面采用极度宽松的 **MIT** 协议，赋予你无限的魔改自由；同时我们在运行时以外部指令流拉起 **AGPL-3.0** 协议的底层引擎，遵守系统级调用的隔离边界。

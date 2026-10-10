@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" width="100%" fill="#0A0A0A">
+  <!-- Background -->
+  <rect width="1000" height="400" fill="#0A0A0A" />
+  
+  <!-- Subtle Grid -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#4ADE80" stroke-width="0.5" stroke-opacity="0.1" />
+  </pattern>
+  <rect width="1000" height="400" fill="url(#grid)" />
+
+  <!-- Window Frame -->
+  <rect x="50" y="50" width="900" height="300" fill="#121212" stroke="#4ADE80" stroke-opacity="0.3" stroke-width="1" rx="4" />
+  <rect x="50" y="50" width="900" height="30" fill="#4ADE80" fill-opacity="0.1" stroke="#4ADE80" stroke-opacity="0.3" stroke-width="1" rx="4" />
+  
+  <text x="70" y="70" font-family="Consolas, monospace" font-size="12" fill="#4ADE80" font-weight="bold">TDLauncher_</text>
+  <text x="470" y="70" font-family="Consolas, monospace" font-size="12" fill="#4ADE80" fill-opacity="0.6">1280x720 · QGraphicsView</text>
+
+  <!-- Left Column: Links & Params -->
+  <rect x="70" y="100" width="300" height="120" fill="#1E291C" stroke="#4ADE80" stroke-opacity="0.2" stroke-width="1" />
+  <text x="85" y="125" font-family="Consolas, monospace" font-size="14" fill="#4ADE80" fill-opacity="0.8">https://t.me/channel/193</text>
+  <text x="85" y="150" font-family="Consolas, monospace" font-size="14" fill="#4ADE80" fill-opacity="0.8">https://t.me/c/1697/151</text>
+  
+  <!-- Progress Area -->
+  <rect x="390" y="100" width="540" height="230" fill="#0A0A0A" stroke="#4ADE80" stroke-opacity="0.4" stroke-width="1" />
+  
+  <!-- Big Percent -->
+  <text x="420" y="180" font-family="Consolas, monospace" font-size="72" fill="#4ADE80" font-weight="bold">99</text>
+  <text x="500" y="180" font-family="Consolas, monospace" font-size="24" fill="#4ADE80" fill-opacity="0.7">%</text>
+  
+  <rect x="420" y="210" width="480" height="16" fill="#1E291C" rx="2" />
+  <rect x="420" y="210" width="470" height="16" fill="#4ADE80" rx="2" />
+  
+  <text x="420" y="250" font-family="Consolas, monospace" font-size="14" fill="#4ADE80" fill-opacity="0.6">速度: 12MB/s</text>
+  <text x="560" y="250" font-family="Consolas, monospace" font-size="14" fill="#4ADE80" fill-opacity="0.6">文件: 75/77</text>
+  <text x="680" y="250" font-family="Consolas, monospace" font-size="14" fill="#4ADE80" fill-opacity="0.6">ETA: 0s</text>
+
+  <!-- CLI Output Simulation -->
+  <rect x="420" y="270" width="480" height="40" fill="#0A0A0A" />
+  <text x="430" y="295" font-family="Consolas, monospace" font-size="12" fill="#4ADE80" fill-opacity="0.5">> Channel(123):567 -> video.mp4 99% [========> </text>
+
+  <!-- Takeout Badge -->
+  <rect x="70" y="290" width="120" height="24" fill="#4ADE80" fill-opacity="0.1" stroke="#4ADE80" stroke-opacity="0.6" stroke-width="1" rx="2" />
+  <text x="82" y="307" font-family="Consolas, monospace" font-size="12" fill="#4ADE80" font-weight="bold">Takeout 模式</text>
+
+  <rect x="200" y="290" width="170" height="24" fill="#4ADE80" fill-opacity="0.1" stroke="#4ADE80" stroke-opacity="0.6" stroke-width="1" rx="2" />
+  <text x="212" y="307" font-family="Consolas, monospace" font-size="12" fill="#4ADE80" font-weight="bold">评论区解析就绪</text>
+</svg>
