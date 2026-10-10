@@ -33,7 +33,7 @@ class StateParser:
         self._ansi_escape = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
         
         # 匹配完成行：ASMR基佬中心(1539428348):19281 ->~ ... done! [4.76 MB in 1.936s; 2.42 MB/s]
-        self._re_done = re.compile(r"^(.*?)\s*(?:->|→|->~).*?(?:done!|failed!)(?:\s*\[(.*?)\])?", re.IGNORECASE)
+        self._re_done = re.compile(r"^(.*?)\s*(?:->|→|->~|-~).*?(?:done!|failed!)(?:\s*\[(.*?)\])?", re.IGNORECASE)
         
         # 匹配进度行：ASMR基佬中心(1539428348):19281 -> ... 55% [===>  ] 2.4 MB/s ETA 3s
         # 注意 tdl 的格式可能不带 ->，直接是 名字 55%
@@ -88,7 +88,7 @@ class StateParser:
         if m_prog:
             desc = m_prog.group(1).strip()
             # 清理 desc 中可能带有的 -> 等连接符
-            desc = re.split(r"\s*(?:->|→|->~)\s*", desc)[0].strip()
+            desc = re.split(r"\s*(?:->|→|->~|-~)\s*", desc)[0].strip()
             
             ev = TdlEvent("PROGRESS", clean)
             ev.percent = float(m_prog.group("pct"))
