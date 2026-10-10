@@ -275,24 +275,25 @@ class CellsBar(QWidget):
         cell_width = max(1.0, (bounds.width() - gap * (self._count - 1)) / self._count)
         on = self._display_value / 100.0 * self._count
         active = QColor(ACC)
-        active.setAlpha(90)
+        active.setAlpha(180)
+        dim = QColor("#1E291C")
+        
         for i in range(self._count):
             x = bounds.x() + i * (cell_width + gap)
             rect = QRectF(x, bounds.y(), cell_width, bounds.height())
             fill = max(0.0, min(1.0, on - i))
+            
+            # 先画底色（灰格）
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(dim)
+            painter.drawRoundedRect(rect, 2.5, 2.5)
+            
+            # 如果有进度，则画实心绿填充上去
             if fill > 0:
-                is_head = fill < 1.0  # 扫描前沿：电子束亮头
-                halo = QColor(ACC_HI if is_head else ACC)
-                halo.setAlpha(110 if is_head else 60)
-                painter.setPen(Qt.NoPen)
-                painter.setBrush(halo)
-                painter.drawRoundedRect(rect.adjusted(-2, -3, 2, 3), 3, 3)
-                painter.setBrush(QColor(ACC_HI) if is_head else QColor(ACC))
-                painter.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height()), 2.5, 2.5)
-            else:
-                painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor("#1E291C"))
-                painter.drawRoundedRect(rect, 2.5, 2.5)
+                painter.setBrush(active)
+                # 画截断的填充区
+                fill_rect = QRectF(rect.x(), rect.y(), rect.width() * fill, rect.height())
+                painter.drawRoundedRect(fill_rect, 2.5, 2.5)
 
 
 class StatusMark(QWidget):
@@ -459,6 +460,7 @@ class Job:
         self.command_pct = 0.0
         self.command_file_progress: dict = {}
         self.command_log_start = 0
+        self.expected_files = 0
         self.stage_progress = [0.0] * len(commands)
         download_count = sum(1 for command in commands if command and command[0] == "dl")
         self.download_stage_count = download_count
@@ -744,8 +746,8 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         root = QVBoxLayout(self._design)
-        root.setContentsMargins(14, 12, 14, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(20, 16, 20, 28)
+        root.setSpacing(12)
 
         # ---- 顶栏 ----
         hdr = QFrame()
@@ -754,13 +756,6 @@ class MainWindow(QMainWindow):
         hl.setContentsMargins(14, 6, 14, 6)
         self._lbl_brand = QLabel('TDLauncher<span style="color:%s">_</span>' % INK)
         self._lbl_brand.setObjectName("Brand")
-        bglow = QGraphicsDropShadowEffect(self._lbl_brand)
-        bglow.setBlurRadius(18)
-        bglow.setOffset(0, 0)
-        bc = QColor(ACC)
-        bc.setAlpha(90)
-        bglow.setColor(bc)
-        self._lbl_brand.setGraphicsEffect(bglow)
         hl.addWidget(self._lbl_brand)
         hl.addSpacing(14)
         self._lbl_row = QLabel("")
@@ -785,7 +780,7 @@ class MainWindow(QMainWindow):
         links = QFrame()
         links.setObjectName("Panel")
         ll = QVBoxLayout(links)
-        ll.setContentsMargins(14, 12, 14, 10)
+        ll.setContentsMargins(16, 14, 16, 16)
         ll.setSpacing(8)
         t = QLabel("下载链接 · 每行一个任务")
         t.setObjectName("SecTitle")
@@ -793,6 +788,8 @@ class MainWindow(QMainWindow):
         self._txt_links = QTextEdit()
         self._txt_links.setPlaceholderText("https://t.me/telegram/193")
         self._txt_links.setFont(QFont("Consolas", 12))
+        self._txt_links.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._txt_links.customContextMenuRequested.connect(self._show_txt_links_menu)
         self._txt_links.textChanged.connect(self._on_links_changed)
         ll.addWidget(self._txt_links, 1)
         lfoot = QHBoxLayout()
@@ -907,7 +904,7 @@ class MainWindow(QMainWindow):
         prog = QFrame()
         prog.setObjectName("Panel")
         prl = QVBoxLayout(prog)
-        prl.setContentsMargins(14, 12, 14, 12)
+        prl.setContentsMargins(16, 14, 16, 16)
         prl.setSpacing(10)
         self._lbl_progress_title = QLabel("下载状态")
         self._lbl_progress_title.setObjectName("SecTitle")
@@ -933,15 +930,8 @@ class MainWindow(QMainWindow):
         big.setSpacing(3)
         self._lbl_bigpct = QLabel("0")
         self._lbl_bigpct.setObjectName("BigPct")
-        self._lbl_bigpct.setFixedWidth(104)
         self._lbl_bigpct.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
-        glow = QGraphicsDropShadowEffect(self._lbl_bigpct)
-        glow.setBlurRadius(28)
-        glow.setOffset(0, 0)
-        gc = QColor(ACC)
-        gc.setAlpha(70)
-        glow.setColor(gc)
-        self._lbl_bigpct.setGraphicsEffect(glow)
+        # 移除 QGraphicsDropShadowEffect 避免在 QGraphicsView 缩放中导致渲染消失
         self._bigpct_display = 0.0
         self._bigpct_animation = QVariantAnimation(self)
         self._bigpct_animation.setDuration(180)
@@ -1026,16 +1016,11 @@ class MainWindow(QMainWindow):
         self._btn_stop.setObjectName("Stop")
         self._btn_stop.setEnabled(False)
         self._btn_stop.clicked.connect(self._stop_download)
+        self._btn_stop.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
         botrow.addWidget(self._btn_stop)
         self._btn_start = QPushButton("开始下载")
         self._btn_start.setObjectName("Primary")
-        sglow = QGraphicsDropShadowEffect(self._btn_start)
-        sglow.setBlurRadius(22)
-        sglow.setOffset(0, 0)
-        sc = QColor(ACC)
-        sc.setAlpha(80)
-        sglow.setColor(sc)
-        self._btn_start.setGraphicsEffect(sglow)
+        self._btn_start.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
         self._btn_start.clicked.connect(self._start_download)
         botrow.addWidget(self._btn_start)
         rightbtns.addLayout(botrow)
@@ -1082,6 +1067,37 @@ class MainWindow(QMainWindow):
             self._txt_output.setVisible(False)
 
     # ---- 事件 ----
+
+    def _show_txt_links_menu(self, pos):
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        
+        # 复制
+        act_copy = QAction("复制", self)
+        act_copy.setEnabled(self._txt_links.textCursor().hasSelection())
+        act_copy.triggered.connect(self._txt_links.copy)
+        menu.addAction(act_copy)
+        
+        # 粘贴
+        act_paste = QAction("粘贴", self)
+        act_paste.setEnabled(self._txt_links.canPaste())
+        act_paste.triggered.connect(self._txt_links.paste)
+        menu.addAction(act_paste)
+        
+        menu.addSeparator()
+        
+        # 全选
+        act_select_all = QAction("全选", self)
+        act_select_all.triggered.connect(self._txt_links.selectAll)
+        menu.addAction(act_select_all)
+        
+        # 清空
+        act_clear = QAction("清空", self)
+        act_clear.triggered.connect(self._txt_links.clear)
+        menu.addAction(act_clear)
+        
+        menu.exec(self._txt_links.mapToGlobal(pos))
 
     def _on_links_changed(self):
         text = self._txt_links.toPlainText().strip()
@@ -1251,6 +1267,10 @@ class MainWindow(QMainWindow):
             self._insert(self._files_box, row)
             self._detail_files[name] = row
             self._detail_file_rows.append(row)
+            # 自动滚动到底部
+            from PySide6.QtCore import QTimer
+            vbar = self._files_scroll.verticalScrollBar()
+            QTimer.singleShot(0, lambda: vbar.setValue(vbar.maximum()))
         row.set_pct(pct)
 
     def _selected_job(self):
@@ -1311,6 +1331,8 @@ class MainWindow(QMainWindow):
 
     def _sync_filecount(self, job):
         total = len(job.files)
+        if job.expected_files > 0:
+            total = max(total, job.expected_files)
         done = sum(1 for v in job.files.values() if v >= 100)
         self._lbl_totalcount.setText(f"{done}/{total}")
 
@@ -1428,6 +1450,25 @@ class MainWindow(QMainWindow):
     def _on_job_cmd_exit(self, job, code):
         job.runner = None
         export_empty = code == 0 and self._export_has_no_messages(job)
+        
+        # 尝试从成功的 export 命令提取评论区总媒体文件数
+        if code == 0 and 0 <= job.cur < len(job.commands) and job.commands[job.cur][:2] == ["chat", "export"]:
+            try:
+                cmd = job.commands[job.cur]
+                if "-o" in cmd:
+                    path = cmd[cmd.index("-o") + 1]
+                    import json
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    msgs = data.get("messages", [])
+                    # 扩大对 Telegram 导出格式中各类媒体/文件字段的识别范围
+                    media_keys = {"photo", "file", "video", "document", "audio", "media", "media_type", "animation", "voice", "video_message", "sticker"}
+                    cnt = sum(1 for m in msgs if isinstance(m, dict) and any(k in m for k in media_keys))
+                    if cnt > 0:
+                        job.expected_files = cnt
+            except Exception:
+                pass
+
         no_comment_group = code != 0 and self._is_no_comment_group_error(job)
         skip_index = None
         if export_empty:
@@ -1723,9 +1764,14 @@ class MainWindow(QMainWindow):
                     current = job.command_pct
                 current = max(job.stage_progress[job.cur], min(99.0, current))
                 job.stage_progress[job.cur] = current
-            total_weight = sum(job.stage_weights)
-            total = sum(pct * weight for pct, weight in zip(job.stage_progress, job.stage_weights)) / total_weight
-            job.pct = min(99, max(job.pct, int(total)))
+            
+            if job.expected_files > 0:
+                done = sum(1 for v in job.files.values() if v >= 100)
+                job.pct = min(100, int((done / job.expected_files) * 100))
+            else:
+                total_weight = sum(job.stage_weights)
+                total = sum(pct * weight for pct, weight in zip(job.stage_progress, job.stage_weights)) / total_weight
+                job.pct = min(99, max(job.pct, int(total)))
         self._set_row_pct(job)
         if job is self._selected_job():
             self._refresh_detail_progress(job)
@@ -1748,21 +1794,12 @@ class MainWindow(QMainWindow):
         self._append_log("■ 下载已停止")
 
     def _set_badge_breathing(self, on: bool):
-        if not hasattr(self, "_badge_fx"):
-            self._badge_fx = QGraphicsOpacityEffect(self._lbl_badge)
-            self._lbl_badge.setGraphicsEffect(self._badge_fx)
-            self._badge_anim = QVariantAnimation(self)
-            self._badge_anim.setDuration(1600)
-            self._badge_anim.setStartValue(1.0)
-            self._badge_anim.setEndValue(0.55)
-            self._badge_anim.setEasingCurve(QEasingCurve.InOutSine)
-            self._badge_anim.setLoopCount(-1)
-            self._badge_anim.valueChanged.connect(self._badge_fx.setOpacity)
-        self._badge_anim.stop()
+        # 移除 QGraphicsOpacityEffect 避免在 QGraphicsView 中触发渲染 Bug 导致整个标签不可见
+        # 仅通过文本或颜色提示，不再做动画
         if on:
-            self._badge_anim.start()
+            self._lbl_badge.setStyleSheet(f"color: {ACC};")
         else:
-            self._badge_fx.setOpacity(1.0)
+            self._lbl_badge.setStyleSheet("")
 
     def _update_ui_running(self, running: bool):
         if not running:
