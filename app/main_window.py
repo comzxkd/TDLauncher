@@ -1442,7 +1442,6 @@ class MainWindow(QMainWindow):
             job.status = "done" if job.done == len(job.commands) else "failed"
             self._on_job_done(job)
             return
-        job.parser.reset()
         job.command_pct = 0.0
         job.command_file_progress.clear()
         job.command_log_start = len(job.log)
