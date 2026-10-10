@@ -637,14 +637,15 @@ class MainWindow(QMainWindow):
         if not self._tdl_path:
             QMessageBox.warning(self, "TDLauncher", "未找到 tdl.exe，请确认安装路径。")
         else:
+            # 使用非阻塞的方式检测登录状态，避免拖慢主窗口启动
             self._check_login_status()
 
         QTimer.singleShot(0, self._fit)
 
-        # 磷光时基扫描：仅下载中运行
+        # 磷光时基扫描与动态文本：仅下载中运行
         self._sweep_timer = QTimer(self)
         self._sweep_timer.setInterval(33)
-        self._sweep_timer.timeout.connect(lambda: self._design.advance_sweep())
+        self._sweep_timer.timeout.connect(self._on_sweep_timer)
 
     # ---- 窗口等比缩放 ----
 
@@ -1348,6 +1349,12 @@ class MainWindow(QMainWindow):
         if not text:
             QMessageBox.information(self, "提示", "请先粘贴 Telegram 链接。")
             return
+        
+        # 让 UI 立即反馈点击操作，避免因解析过程耗时显得“没反应”
+        self._btn_start.setText("正在解析...")
+        self._btn_start.setEnabled(False)
+        QApplication.processEvents()
+        
         lines = [l.strip() for l in text.split("\n") if l.strip()]
         dir_path = self._txt_dir.text().strip()
         if not os.path.isdir(dir_path):
@@ -1805,6 +1812,7 @@ class MainWindow(QMainWindow):
         if not running:
             self._set_badge_breathing(False)
         if running:
+            self._loading_ticks = 0
             self._sweep_timer.start()
         else:
             self._sweep_timer.stop()
@@ -1820,38 +1828,53 @@ class MainWindow(QMainWindow):
         self._chk_proxy.setEnabled(not running)
         self._txt_proxy.setEnabled(not running and self._chk_proxy.isChecked())
 
+    def _on_sweep_timer(self):
+        self._design.advance_sweep()
+        if hasattr(self, "_loading_ticks"):
+            self._loading_ticks += 1
+            if self._loading_ticks % 15 == 0:  # 约 500ms 变化一次
+                dots = "." * ((self._loading_ticks // 15) % 4)
+                pad = " " * (3 - len(dots))
+                # 配合按钮定宽策略，更新动态文字
+                self._btn_start.setText(f"下载中{dots}{pad}")
+
     def _log_output(self, text: str):
         self._app_log.append(text)
         self._append_log(text)
 
     def _check_login_status(self):
         try:
-            import subprocess
-            proc = subprocess.Popen(
-                [self._tdl_path, "chat", "ls"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding="utf-8", errors="replace",
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            proc.communicate(timeout=20)
-            if proc.returncode != 0:
-                self._log_output("⚠ 未登录或登录已过期，请运行 tdl login -T qr 重新登录")
-            else:
-                self._log_output("✓ 已登录，就绪")
+            from PySide6.QtCore import QProcess
+            self._login_proc = QProcess(self)
+            self._login_proc.finished.connect(self._on_login_check_finished)
+            self._login_proc.start(self._tdl_path, ["chat", "ls"])
         except Exception as e:
-            self._log_output(f"⚠ 登录检测失败: {e}")
+            self._log_output(f"⚠ 登录检测启动失败: {e}")
+
+    def _on_login_check_finished(self, exitCode, exitStatus):
+        if exitCode != 0:
+            self._log_output("⚠ 未登录或登录已过期，请运行 tdl login -T qr 重新登录")
+        else:
+            self._log_output("✓ 已登录，就绪")
+        self._login_proc = None
 
     def _load_tdl_version(self):
         if not self._tdl_path:
             return
         try:
-            import subprocess
-            out = subprocess.run(
-                [self._tdl_path, "version"], capture_output=True, text=True, timeout=8,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            ).stdout
+            from PySide6.QtCore import QProcess
+            self._ver_proc = QProcess(self)
+            self._ver_proc.finished.connect(self._on_version_finished)
+            self._ver_proc.start(self._tdl_path, ["version"])
+        except Exception:
+            self._lbl_path.setText(self._tdl_path)
+
+    def _on_version_finished(self):
+        try:
+            out = self._ver_proc.readAllStandardOutput().data().decode("utf-8", "ignore")
             m = re.search(r"Version:\s*([\w.]+)", out)
             ver = f" v{m.group(1)}" if m else ""
             self._lbl_path.setText(f"{self._tdl_path}{ver}")
         except Exception:
             self._lbl_path.setText(self._tdl_path)
+        self._ver_proc = None
