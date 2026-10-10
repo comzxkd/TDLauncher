@@ -1332,7 +1332,8 @@ class MainWindow(QMainWindow):
 
     def _sync_filecount(self, job):
         total = len(job.files)
-        if job.expected_files > 0:
+        # 任务运行中才使用预估上限；任务完结后，以 tdl 实际发现/处理的真实文件数为准，消除解析误差
+        if job.status not in ("done", "failed", "stopped") and job.expected_files > 0:
             total = max(total, job.expected_files)
         done = sum(1 for v in job.files.values() if v >= 100)
         self._lbl_totalcount.setText(f"{done}/{total}")
