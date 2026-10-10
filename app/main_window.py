@@ -1430,7 +1430,6 @@ class MainWindow(QMainWindow):
     def _start_job(self, job):
         job.status = "running"
         job.cur = 0
-        job.parser.reset()
         if job.qrow is not None:
             job.qrow.set_status("running")
         self._refresh_active_count()
@@ -1513,7 +1512,6 @@ class MainWindow(QMainWindow):
                 job.status = "done" if job.done == len(job.commands) else "failed"
             self._on_job_done(job)
         else:
-            job.parser.reset()
             if job is self._selected_job():
                 self._show_detail(job)
             self._run_job_cmd(job)
